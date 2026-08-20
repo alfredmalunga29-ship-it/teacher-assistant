@@ -7,9 +7,10 @@ from groq import Groq
 from docx import Document
 from pypdf import PdfReader
 
-# Load your API key from .env
+# Load your API key from .env (for local use) or Streamlit secrets (for cloud deployment)
 load_dotenv()
-client = Groq(api_key=os.getenv("GROQ_API_KEY"), timeout=60.0)
+groq_api_key = os.getenv("GROQ_API_KEY") or st.secrets.get("GROQ_API_KEY", None)
+client = Groq(api_key=groq_api_key, timeout=60.0)
 
 st.title("🧑‍🏫 Teacher Assistant")
 st.caption("Ask me to make a lesson plan, quiz, assignment, or report card comment")

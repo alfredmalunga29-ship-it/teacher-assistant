@@ -2,44 +2,132 @@ import streamlit as st
 import os
 import io
 import sqlite3
+from datetime import datetime
 from dotenv import load_dotenv
 from groq import Groq
 from docx import Document
 from pypdf import PdfReader
+
+# Page setup — sidebar is now the main navigation, so keep it open by default
+st.set_page_config(
+    page_title="Teacher Assistant",
+    page_icon="🧑‍🏫",
+    layout="centered",
+    initial_sidebar_state="expanded"
+)
 
 # Load your API key from .env (for local use) or Streamlit secrets (for cloud deployment)
 load_dotenv()
 groq_api_key = os.getenv("GROQ_API_KEY") or st.secrets.get("GROQ_API_KEY", None)
 client = Groq(api_key=groq_api_key, timeout=60.0)
 
-st.title("🧑‍🏫 Teacher Assistant")
-st.caption("Ask me to make a lesson plan, quiz, assignment, or report card comment")
+# ---------- Helper: time-based greeting ----------
+def get_greeting():
+    hour = datetime.now().hour
+    if hour < 12:
+        return "Good morning"
+    elif hour < 18:
+        return "Good afternoon"
+    else:
+        return "Good evening"
 
-# ---------- Database setup (saves chat history to a local file) ----------
+# ---------- Database setup (saves chats to a local file, organized into separate conversations) ----------
 DB_PATH = "chat_history.db"
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     conn.execute("""
-        CREATE TABLE IF NOT EXISTS messages (
+        CREATE TABLE IF NOT EXISTS conversations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            role TEXT NOT NULL,
-            content TEXT NOT NULL,
+            title TEXT NOT NULL DEFAULT 'New Chat',
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
+
+    # Check if an old-style messages table (no conversation_id) already exists
+    existing_cols = [row[1] for row in conn.execute("PRAGMA table_info(messages)")]
+
+    if existing_cols and "conversation_id" not in existing_cols:
+        # Old schema found — migrate it into a single conversation instead of losing history
+        conn.execute("ALTER TABLE messages RENAME TO messages_old")
+        conn.execute("""
+            CREATE TABLE messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id INTEGER NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (conversation_id) REFERENCES conversations(id)
+            )
+        """)
+        cur = conn.execute("INSERT INTO conversations (title) VALUES ('Previous Chat')")
+        migrated_convo_id = cur.lastrowid
+        old_rows = conn.execute("SELECT role, content FROM messages_old ORDER BY id ASC").fetchall()
+        for role, content in old_rows:
+            conn.execute(
+                "INSERT INTO messages (conversation_id, role, content) VALUES (?, ?, ?)",
+                (migrated_convo_id, role, content)
+            )
+        conn.execute("DROP TABLE messages_old")
+    else:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id INTEGER NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (conversation_id) REFERENCES conversations(id)
+            )
+        """)
+
     conn.commit()
     conn.close()
 
-def load_messages():
+init_db()
+
+def list_conversations():
     conn = sqlite3.connect(DB_PATH)
-    rows = conn.execute("SELECT id, role, content FROM messages ORDER BY id ASC").fetchall()
+    rows = conn.execute("SELECT id, title FROM conversations ORDER BY id DESC").fetchall()
+    conn.close()
+    return [{"id": r[0], "title": r[1]} for r in rows]
+
+def create_conversation(title="New Chat"):
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.execute("INSERT INTO conversations (title) VALUES (?)", (title,))
+    conn.commit()
+    new_id = cur.lastrowid
+    conn.close()
+    return new_id
+
+def rename_conversation(conversation_id, title):
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("UPDATE conversations SET title = ? WHERE id = ?", (title, conversation_id))
+    conn.commit()
+    conn.close()
+
+def delete_conversation(conversation_id):
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("DELETE FROM messages WHERE conversation_id = ?", (conversation_id,))
+    conn.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
+    conn.commit()
+    conn.close()
+
+def load_messages(conversation_id):
+    conn = sqlite3.connect(DB_PATH)
+    rows = conn.execute(
+        "SELECT id, role, content FROM messages WHERE conversation_id = ? ORDER BY id ASC",
+        (conversation_id,)
+    ).fetchall()
     conn.close()
     return [{"id": r[0], "role": r[1], "content": r[2]} for r in rows]
 
-def save_message(role, content):
+def save_message(conversation_id, role, content):
     conn = sqlite3.connect(DB_PATH)
-    cur = conn.execute("INSERT INTO messages (role, content) VALUES (?, ?)", (role, content))
+    cur = conn.execute(
+        "INSERT INTO messages (conversation_id, role, content) VALUES (?, ?, ?)",
+        (conversation_id, role, content)
+    )
     conn.commit()
     new_id = cur.lastrowid
     conn.close()
@@ -51,17 +139,16 @@ def update_message(msg_id, content):
     conn.commit()
     conn.close()
 
-def clear_all_messages():
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("DELETE FROM messages")
-    conn.commit()
-    conn.close()
-
-init_db()
-
 # ---------- Session state setup ----------
+if "current_conversation_id" not in st.session_state:
+    existing = list_conversations()
+    if existing:
+        st.session_state.current_conversation_id = existing[0]["id"]  # most recent chat
+    else:
+        st.session_state.current_conversation_id = create_conversation()
+
 if "messages" not in st.session_state:
-    st.session_state.messages = load_messages()  # load saved history on first run
+    st.session_state.messages = load_messages(st.session_state.current_conversation_id)
 
 if "mode" not in st.session_state:
     st.session_state.mode = None  # which form is currently open
@@ -104,44 +191,73 @@ def read_uploaded_file(uploaded_file):
     else:  # assume plain text
         return uploaded_file.read().decode("utf-8", errors="ignore")
 
-# ---------- Sidebar: chat history controls ----------
+# ---------- Sidebar: main navigation (Claude-style left panel) ----------
 with st.sidebar:
-    st.header("Chat History")
-    st.caption(f"{len(st.session_state.messages)} messages saved")
-    if st.button("🗑️ Clear Chat History"):
-        clear_all_messages()
-        st.session_state.messages = []
-        st.rerun()
+    st.markdown("### 🧑‍🏫 Teacher Assistant")
 
-# ---------- Quick action buttons ----------
-st.write("**Quick actions:**")
-col1, col2, col3, col4, col5, col6 = st.columns(6)
+    # Teacher's display name — used for the greeting (session-only until login system is added)
+    if "teacher_name" not in st.session_state:
+        st.session_state.teacher_name = ""
+    st.session_state.teacher_name = st.text_input(
+        "Your name", value=st.session_state.teacher_name, placeholder="e.g. Alfred"
+    )
 
-with col1:
-    if st.button("📝 Lesson Plan"):
+    st.divider()
+    st.caption("QUICK ACTIONS")
+
+    if st.button("📝 Lesson Plan", use_container_width=True):
         st.session_state.mode = "lesson_plan"
-
-with col2:
-    if st.button("❓ Quiz / Test"):
+    if st.button("❓ Quiz / Test", use_container_width=True):
         st.session_state.mode = "quiz"
-
-with col3:
-    if st.button("📋 Assignment"):
+    if st.button("📋 Assignment", use_container_width=True):
         st.session_state.mode = "assignment"
-
-with col4:
-    if st.button("💬 Report Comment"):
+    if st.button("💬 Report Comment", use_container_width=True):
         st.session_state.mode = "comment"
-
-with col5:
-    if st.button("📄 Summarize Doc"):
+    if st.button("📄 Summarize Doc", use_container_width=True):
         st.session_state.mode = "summarize"
-
-with col6:
-    if st.button("📓 Generate Notes"):
+    if st.button("📓 Generate Notes", use_container_width=True):
         st.session_state.mode = "notes"
 
+    st.divider()
+    if st.button("➕ New Chat", use_container_width=True):
+        new_id = create_conversation()
+        st.session_state.current_conversation_id = new_id
+        st.session_state.messages = []
+        st.session_state.mode = None
+        st.rerun()
+
+    st.caption("YOUR CHATS")
+    conversations = list_conversations()
+    for convo in conversations:
+        is_current = convo["id"] == st.session_state.current_conversation_id
+        label = ("🟢 " if is_current else "") + convo["title"]
+        col_chat, col_del = st.columns([4, 1])
+        with col_chat:
+            if st.button(label, key=f"convo_{convo['id']}", use_container_width=True):
+                st.session_state.current_conversation_id = convo["id"]
+                st.session_state.messages = load_messages(convo["id"])
+                st.session_state.mode = None
+                st.rerun()
+        with col_del:
+            if st.button("🗑️", key=f"del_{convo['id']}"):
+                delete_conversation(convo["id"])
+                if convo["id"] == st.session_state.current_conversation_id:
+                    remaining = list_conversations()
+                    if remaining:
+                        st.session_state.current_conversation_id = remaining[0]["id"]
+                        st.session_state.messages = load_messages(remaining[0]["id"])
+                    else:
+                        st.session_state.current_conversation_id = create_conversation()
+                        st.session_state.messages = []
+                st.rerun()
+
+# ---------- Greeting + example prompts (shown at the top of the main area) ----------
+greeting_name = f", {st.session_state.teacher_name}" if st.session_state.teacher_name else ""
+st.title(f"{get_greeting()}{greeting_name} 👋")
+st.caption("What would you like help with today?")
+
 quick_prompt = None  # will hold the built prompt once a form is submitted
+
 
 # ---------- Lesson Plan form ----------
 if st.session_state.mode == "lesson_plan":
@@ -296,6 +412,24 @@ Document:
         elif submitted and uploaded_file is None:
             st.warning("Please upload a file first.")
 
+# ---------- Example prompts (shown only when there's no conversation yet) ----------
+if len(st.session_state.messages) == 0 and st.session_state.mode is None:
+    import random
+    example_prompts = [
+        ("📝", "Make a lesson plan", "Create a lesson plan for a topic I'll describe"),
+        ("❓", "Build a quick quiz", "Create a short quiz on a topic I'll describe"),
+        ("💬", "Draft a report comment", "Write a report card comment for a student"),
+        ("📓", "Summarize a concept", "Create simple study notes on a topic I'll describe"),
+    ]
+    random.shuffle(example_prompts)
+    st.write("**Try one of these:**")
+    ex_col1, ex_col2 = st.columns(2)
+    for idx, (emoji, label, prompt_text) in enumerate(example_prompts):
+        target_col = ex_col1 if idx % 2 == 0 else ex_col2
+        with target_col:
+            if st.button(f"{emoji} {label}", key=f"example_{idx}", use_container_width=True):
+                quick_prompt = prompt_text
+
 # ---------- Show past messages (with download/edit for assistant replies) ----------
 for i, msg in enumerate(st.session_state.messages):
     with st.chat_message(msg["role"]):
@@ -315,19 +449,20 @@ for i, msg in enumerate(st.session_state.messages):
             else:
                 st.write(msg["content"])
 
-            btn_col1, btn_col2, btn_col3 = st.columns([1, 1, 3])
+            btn_col1, btn_col2 = st.columns(2)
             with btn_col1:
-                if st.button("✏️ Edit", key=f"edit_btn_{i}"):
+                if st.button("✏️ Edit", key=f"edit_btn_{i}", use_container_width=True):
                     st.session_state[edit_key] = True
                     st.rerun()
             with btn_col2:
                 docx_buffer = text_to_docx_bytes(msg["content"])
                 st.download_button(
-                    "⬇️ Download .docx",
+                    "⬇️ Download",
                     data=docx_buffer,
                     file_name=f"document_{i}.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    key=f"download_{i}"
+                    key=f"download_{i}",
+                    use_container_width=True
                 )
         else:
             st.write(msg["content"])
@@ -341,8 +476,13 @@ if quick_prompt:
     st.session_state.mode = None  # close the form after submitting
 
 if user_input:
+    # If this is the first message in the conversation, auto-title it
+    if len(st.session_state.messages) == 0:
+        auto_title = user_input.strip()[:40] + ("..." if len(user_input.strip()) > 40 else "")
+        rename_conversation(st.session_state.current_conversation_id, auto_title)
+
     # Show the user's message and save it to the database
-    user_msg_id = save_message("user", user_input)
+    user_msg_id = save_message(st.session_state.current_conversation_id, "user", user_input)
     st.session_state.messages.append({"id": user_msg_id, "role": "user", "content": user_input})
     with st.chat_message("user"):
         st.write(user_input)
@@ -366,6 +506,6 @@ if user_input:
                 st.error(reply)
 
     # Save the reply to the database and history
-    assistant_msg_id = save_message("assistant", reply)
+    assistant_msg_id = save_message(st.session_state.current_conversation_id, "assistant", reply)
     st.session_state.messages.append({"id": assistant_msg_id, "role": "assistant", "content": reply})
     st.rerun()

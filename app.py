@@ -2,6 +2,8 @@ import streamlit as st
 import os
 import io
 import sqlite3
+import hashlib
+import binascii
 from datetime import datetime
 from dotenv import load_dotenv
 from groq import Groq
@@ -36,13 +38,31 @@ DB_PATH = "chat_history.db"
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
+
+    # Users table (accounts)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            salt TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
     conn.execute("""
         CREATE TABLE IF NOT EXISTS conversations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
             title TEXT NOT NULL DEFAULT 'New Chat',
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
+
+    # Migration: add user_id column if this conversations table pre-dates login
+    convo_cols = [row[1] for row in conn.execute("PRAGMA table_info(conversations)")]
+    if "user_id" not in convo_cols:
+        conn.execute("ALTER TABLE conversations ADD COLUMN user_id INTEGER")
 
     # Check if an old-style messages table (no conversation_id) already exists
     existing_cols = [row[1] for row in conn.execute("PRAGMA table_info(messages)")]
@@ -86,15 +106,62 @@ def init_db():
 
 init_db()
 
-def list_conversations():
+# ---------- Password hashing (never store plain-text passwords) ----------
+def hash_password(password, salt=None):
+    if salt is None:
+        salt = os.urandom(16)
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 100000)
+    return binascii.hexlify(dk).decode(), binascii.hexlify(salt).decode()
+
+def verify_password(password, stored_hash, stored_salt):
+    salt = binascii.unhexlify(stored_salt)
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 100000)
+    return binascii.hexlify(dk).decode() == stored_hash
+
+# ---------- User account functions ----------
+def create_user(username, password):
     conn = sqlite3.connect(DB_PATH)
-    rows = conn.execute("SELECT id, title FROM conversations ORDER BY id DESC").fetchall()
+    existing = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+    if existing:
+        conn.close()
+        return None  # username already taken
+    pw_hash, salt = hash_password(password)
+    cur = conn.execute(
+        "INSERT INTO users (username, password_hash, salt) VALUES (?, ?, ?)",
+        (username, pw_hash, salt)
+    )
+    conn.commit()
+    new_user_id = cur.lastrowid
+    # One-time: claim any old conversations that existed before accounts were added
+    conn.execute("UPDATE conversations SET user_id = ? WHERE user_id IS NULL", (new_user_id,))
+    conn.commit()
+    conn.close()
+    return new_user_id
+
+def authenticate_user(username, password):
+    conn = sqlite3.connect(DB_PATH)
+    row = conn.execute(
+        "SELECT id, password_hash, salt FROM users WHERE username = ?", (username,)
+    ).fetchone()
+    conn.close()
+    if not row:
+        return None
+    user_id, pw_hash, salt = row
+    if verify_password(password, pw_hash, salt):
+        return user_id
+    return None
+
+def list_conversations(user_id):
+    conn = sqlite3.connect(DB_PATH)
+    rows = conn.execute(
+        "SELECT id, title FROM conversations WHERE user_id = ? ORDER BY id DESC", (user_id,)
+    ).fetchall()
     conn.close()
     return [{"id": r[0], "title": r[1]} for r in rows]
 
-def create_conversation(title="New Chat"):
+def create_conversation(user_id, title="New Chat"):
     conn = sqlite3.connect(DB_PATH)
-    cur = conn.execute("INSERT INTO conversations (title) VALUES (?)", (title,))
+    cur = conn.execute("INSERT INTO conversations (user_id, title) VALUES (?, ?)", (user_id, title))
     conn.commit()
     new_id = cur.lastrowid
     conn.close()
@@ -139,13 +206,67 @@ def update_message(msg_id, content):
     conn.commit()
     conn.close()
 
+# ---------- Login / Signup gate ----------
+if "user_id" not in st.session_state:
+    st.session_state.user_id = None
+    st.session_state.username = None
+
+if st.session_state.user_id is None:
+    st.title("🧑‍🏫 Teacher Assistant")
+    st.caption("Sign in to access your lesson plans, quizzes, and chat history")
+
+    login_tab, signup_tab = st.tabs(["Log In", "Sign Up"])
+
+    with login_tab:
+        with st.form("login_form"):
+            login_username = st.text_input("Username")
+            login_password = st.text_input("Password", type="password")
+            login_submitted = st.form_submit_button("Log In")
+
+            if login_submitted:
+                if not login_username or not login_password:
+                    st.warning("Please enter both a username and password.")
+                else:
+                    result_user_id = authenticate_user(login_username, login_password)
+                    if result_user_id:
+                        st.session_state.user_id = result_user_id
+                        st.session_state.username = login_username
+                        st.rerun()
+                    else:
+                        st.error("Incorrect username or password.")
+
+    with signup_tab:
+        with st.form("signup_form"):
+            new_username = st.text_input("Choose a username")
+            new_password = st.text_input("Choose a password", type="password")
+            confirm_password = st.text_input("Confirm password", type="password")
+            signup_submitted = st.form_submit_button("Create Account")
+
+            if signup_submitted:
+                if not new_username or not new_password:
+                    st.warning("Please fill in all fields.")
+                elif new_password != confirm_password:
+                    st.warning("Passwords don't match.")
+                elif len(new_password) < 6:
+                    st.warning("Password should be at least 6 characters.")
+                else:
+                    created_id = create_user(new_username, new_password)
+                    if created_id:
+                        st.session_state.user_id = created_id
+                        st.session_state.username = new_username
+                        st.rerun()
+                    else:
+                        st.error("That username is already taken. Try another.")
+
+    st.stop()  # don't render the rest of the app until logged in
+
 # ---------- Session state setup ----------
 if "current_conversation_id" not in st.session_state:
-    existing = list_conversations()
+    existing = list_conversations(st.session_state.user_id)
     if existing:
         st.session_state.current_conversation_id = existing[0]["id"]  # most recent chat
     else:
-        st.session_state.current_conversation_id = create_conversation()
+        st.session_state.current_conversation_id = create_conversation(st.session_state.user_id)
 
 if "messages" not in st.session_state:
     st.session_state.messages = load_messages(st.session_state.current_conversation_id)
@@ -194,13 +315,12 @@ def read_uploaded_file(uploaded_file):
 # ---------- Sidebar: main navigation (Claude-style left panel) ----------
 with st.sidebar:
     st.markdown("### 🧑‍🏫 Teacher Assistant")
-
-    # Teacher's display name — used for the greeting (session-only until login system is added)
-    if "teacher_name" not in st.session_state:
-        st.session_state.teacher_name = ""
-    st.session_state.teacher_name = st.text_input(
-        "Your name", value=st.session_state.teacher_name, placeholder="e.g. Alfred"
-    )
+    st.caption(f"👤 Logged in as **{st.session_state.username}**")
+    if st.button("🚪 Log Out", use_container_width=True):
+        for key in ["user_id", "username", "current_conversation_id", "messages", "mode", "teacher_name"]:
+            if key in st.session_state:
+                del st.session_state[key]
+        st.rerun()
 
     st.divider()
     st.caption("QUICK ACTIONS")
@@ -220,14 +340,14 @@ with st.sidebar:
 
     st.divider()
     if st.button("➕ New Chat", use_container_width=True):
-        new_id = create_conversation()
+        new_id = create_conversation(st.session_state.user_id)
         st.session_state.current_conversation_id = new_id
         st.session_state.messages = []
         st.session_state.mode = None
         st.rerun()
 
     st.caption("YOUR CHATS")
-    conversations = list_conversations()
+    conversations = list_conversations(st.session_state.user_id)
     for convo in conversations:
         is_current = convo["id"] == st.session_state.current_conversation_id
         label = ("🟢 " if is_current else "") + convo["title"]
@@ -242,17 +362,17 @@ with st.sidebar:
             if st.button("🗑️", key=f"del_{convo['id']}"):
                 delete_conversation(convo["id"])
                 if convo["id"] == st.session_state.current_conversation_id:
-                    remaining = list_conversations()
+                    remaining = list_conversations(st.session_state.user_id)
                     if remaining:
                         st.session_state.current_conversation_id = remaining[0]["id"]
                         st.session_state.messages = load_messages(remaining[0]["id"])
                     else:
-                        st.session_state.current_conversation_id = create_conversation()
+                        st.session_state.current_conversation_id = create_conversation(st.session_state.user_id)
                         st.session_state.messages = []
                 st.rerun()
 
 # ---------- Greeting + example prompts (shown at the top of the main area) ----------
-greeting_name = f", {st.session_state.teacher_name}" if st.session_state.teacher_name else ""
+greeting_name = f", {st.session_state.username}" if st.session_state.username else ""
 st.title(f"{get_greeting()}{greeting_name} 👋")
 st.caption("What would you like help with today?")
 

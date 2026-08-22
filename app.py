@@ -301,8 +301,50 @@ def speak_button(text, key):
 # ---------- Helper: turn AI text into a downloadable Word doc ----------
 def text_to_docx_bytes(text):
     doc = Document()
-    for line in text.split("\n"):
+    lines = text.split("\n")
+    i = 0
+
+    while i < len(lines):
+        line = lines[i]
         stripped = line.strip()
+
+        # ---- Detect a markdown table: a "| ... |" row followed by a "|---|---|" separator row ----
+        if stripped.startswith("|") and stripped.endswith("|") and i + 1 < len(lines):
+            next_line = lines[i + 1].strip()
+            is_separator = next_line.startswith("|") and set(next_line.replace("|", "").replace(":", "").strip()) <= {"-", " "}
+
+            if is_separator:
+                # Collect every consecutive table row
+                table_rows = [stripped]
+                j = i + 2  # skip the separator row itself
+                while j < len(lines) and lines[j].strip().startswith("|") and lines[j].strip().endswith("|"):
+                    table_rows.append(lines[j].strip())
+                    j += 1
+
+                parsed_rows = [
+                    [cell.strip() for cell in row.strip("|").split("|")]
+                    for row in table_rows
+                ]
+                num_cols = max(len(r) for r in parsed_rows)
+
+                table = doc.add_table(rows=0, cols=num_cols)
+                table.style = "Table Grid"
+
+                for row_idx, row_values in enumerate(parsed_rows):
+                    row_cells = table.add_row().cells
+                    for col_idx in range(num_cols):
+                        cell_text = row_values[col_idx] if col_idx < len(row_values) else ""
+                        row_cells[col_idx].text = cell_text
+                        if row_idx == 0:  # bold the header row
+                            for para in row_cells[col_idx].paragraphs:
+                                for run in para.runs:
+                                    run.bold = True
+
+                doc.add_paragraph("")  # small spacing gap after the table
+                i = j
+                continue
+
+        # ---- Not a table row — handle normally ----
         if stripped.startswith("### "):
             doc.add_heading(stripped[4:], level=3)
         elif stripped.startswith("## "):
@@ -314,6 +356,8 @@ def text_to_docx_bytes(text):
             p.add_run(stripped[2:-2]).bold = True
         else:
             doc.add_paragraph(line)
+
+        i += 1
 
     buffer = io.BytesIO()
     doc.save(buffer)

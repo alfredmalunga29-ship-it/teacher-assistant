@@ -1,4 +1,4 @@
-streamlit
+streamlit>=1.38.0
 groq
 python-dotenv
 python-docx

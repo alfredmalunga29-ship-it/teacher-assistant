@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import os
 import io
 import sqlite3
@@ -273,6 +274,29 @@ if "messages" not in st.session_state:
 
 if "mode" not in st.session_state:
     st.session_state.mode = None  # which form is currently open
+
+# ---------- Helper: a button that reads text aloud using the browser's built-in voice ----------
+def speak_button(text, key):
+    safe_text = (
+        text.replace("\\", "\\\\")
+            .replace("`", "\\`")
+            .replace("${", "\\${")
+    )
+    html_code = f"""
+    <button onclick="speakText_{key}()" id="btn_{key}"
+        style="padding:6px 14px;border-radius:6px;border:1px solid #d0d0d0;
+        cursor:pointer;background:#f0f2f6;font-size:14px;width:100%;">
+        🔊 Listen
+    </button>
+    <script>
+    function speakText_{key}() {{
+        window.speechSynthesis.cancel();
+        const msg = new SpeechSynthesisUtterance(`{safe_text}`);
+        window.speechSynthesis.speak(msg);
+    }}
+    </script>
+    """
+    components.html(html_code, height=45)
 
 # ---------- Helper: turn AI text into a downloadable Word doc ----------
 def text_to_docx_bytes(text):
@@ -569,7 +593,7 @@ for i, msg in enumerate(st.session_state.messages):
             else:
                 st.write(msg["content"])
 
-            btn_col1, btn_col2 = st.columns(2)
+            btn_col1, btn_col2, btn_col3 = st.columns(3)
             with btn_col1:
                 if st.button("✏️ Edit", key=f"edit_btn_{i}", use_container_width=True):
                     st.session_state[edit_key] = True
@@ -584,8 +608,29 @@ for i, msg in enumerate(st.session_state.messages):
                     key=f"download_{i}",
                     use_container_width=True
                 )
+            with btn_col3:
+                speak_button(msg["content"], key=f"speak_{i}")
         else:
             st.write(msg["content"])
+
+# ---------- Voice input (record and transcribe with Groq Whisper) ----------
+with st.expander("🎤 Or record a voice message"):
+    audio_value = st.audio_input("Tap to record")
+
+    if audio_value is not None:
+        current_audio_id = getattr(audio_value, "file_id", audio_value.name)
+        if st.session_state.get("last_audio_id") != current_audio_id:
+            with st.spinner("Transcribing your voice..."):
+                try:
+                    transcription = client.audio.transcriptions.create(
+                        file=("recording.wav", audio_value.getvalue()),
+                        model="whisper-large-v3-turbo"
+                    )
+                    st.session_state.last_audio_id = current_audio_id
+                    st.session_state.pending_voice_prompt = transcription.text
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Couldn't transcribe that: {e}")
 
 # ---------- Input box at the bottom ----------
 user_input = st.chat_input("What do you need help with today?")
@@ -594,6 +639,11 @@ user_input = st.chat_input("What do you need help with today?")
 if quick_prompt:
     user_input = quick_prompt
     st.session_state.mode = None  # close the form after submitting
+
+# If a voice recording was just transcribed, use that instead
+if st.session_state.get("pending_voice_prompt"):
+    user_input = st.session_state.pending_voice_prompt
+    st.session_state.pending_voice_prompt = None
 
 if user_input:
     # If this is the first message in the conversation, auto-title it

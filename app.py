@@ -613,10 +613,49 @@ for i, msg in enumerate(st.session_state.messages):
         else:
             st.write(msg["content"])
 
-# ---------- Voice input (record and transcribe with Groq Whisper) ----------
-with st.expander("🎤 Or record a voice message"):
-    audio_value = st.audio_input("Tap to record")
+# ---------- Custom styling for a rounded, Claude-style input bar, pinned to the bottom ----------
+st.markdown("""
+<style>
+div[data-testid="stForm"] {
+    border: 1px solid #d0d0d0;
+    border-radius: 24px;
+    padding: 8px 12px;
+}
+div[data-testid="stForm"] div[data-testid="stTextInput"] input {
+    border: none !important;
+    box-shadow: none !important;
+}
+div[data-testid="stForm"] button {
+    border-radius: 20px !important;
+    height: 42px;
+}
+/* Pin the chat input bar to the bottom of the screen */
+.st-key-chat_input_form {
+    position: fixed;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90%;
+    max-width: 700px;
+    background: white;
+    z-index: 999;
+    padding-top: 10px;
+    padding-bottom: 15px;
+    box-shadow: 0 -4px 12px rgba(0,0,0,0.06);
+}
+/* Leave room at the bottom of the page so messages aren't hidden behind the bar */
+.main .block-container {
+    padding-bottom: 120px;
+}
+</style>
+""", unsafe_allow_html=True)
 
+# ---------- Voice recorder (appears when the mic button is tapped) ----------
+if "show_recorder" not in st.session_state:
+    st.session_state.show_recorder = False
+
+if st.session_state.show_recorder:
+    audio_value = st.audio_input("Tap to record, tap again to stop")
     if audio_value is not None:
         current_audio_id = getattr(audio_value, "file_id", audio_value.name)
         if st.session_state.get("last_audio_id") != current_audio_id:
@@ -628,12 +667,30 @@ with st.expander("🎤 Or record a voice message"):
                     )
                     st.session_state.last_audio_id = current_audio_id
                     st.session_state.pending_voice_prompt = transcription.text
+                    st.session_state.show_recorder = False
                     st.rerun()
                 except Exception as e:
                     st.error(f"Couldn't transcribe that: {e}")
 
-# ---------- Input box at the bottom ----------
-user_input = st.chat_input("What do you need help with today?")
+# ---------- Input row: mic button + text box + send button ----------
+user_input = None
+with st.form("chat_input_form", clear_on_submit=True):
+    col_mic, col_text, col_send = st.columns([1, 7, 1])
+    with col_mic:
+        mic_clicked = st.form_submit_button("🎤")
+    with col_text:
+        typed_text = st.text_input(
+            "message", placeholder="Write a message...", label_visibility="collapsed"
+        )
+    with col_send:
+        send_clicked = st.form_submit_button("➤")
+
+if mic_clicked:
+    st.session_state.show_recorder = not st.session_state.show_recorder
+    st.rerun()
+
+if send_clicked and typed_text.strip():
+    user_input = typed_text.strip()
 
 # If a form was just submitted, use that prompt instead
 if quick_prompt:

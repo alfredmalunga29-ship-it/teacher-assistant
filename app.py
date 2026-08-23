@@ -50,6 +50,27 @@ st.markdown("""
     background-color: rgba(0, 0, 0, 0.035);
 }
 
+/* Fix avatar sizing — give them a proper fixed circle instead of a clipped default */
+[data-testid="stChatMessageAvatarUser"],
+[data-testid="stChatMessageAvatarAssistant"] {
+    width: 38px !important;
+    height: 38px !important;
+    min-width: 38px !important;
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 20px !important;
+    line-height: 1 !important;
+    overflow: hidden;
+}
+[data-testid="stChatMessageAvatarUser"] {
+    background-color: rgba(46, 125, 107, 0.18) !important;
+}
+[data-testid="stChatMessageAvatarAssistant"] {
+    background-color: rgba(0, 0, 0, 0.08) !important;
+}
+
 /* Sidebar button spacing — slightly tighter, consistent rounding */
 section[data-testid="stSidebar"] button {
     border-radius: 10px !important;
@@ -64,6 +85,45 @@ div[data-testid="stExpander"] {
 /* Reduce default top padding so the greeting sits closer to the top */
 .main .block-container {
     padding-top: 2rem;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ---------- Soft green glow background (decorative, sits behind everything) ----------
+st.markdown("""
+<div class="glow-bg">
+    <div class="glow-orb glow-orb-1"></div>
+    <div class="glow-orb glow-orb-2"></div>
+    <div class="glow-orb glow-orb-3"></div>
+</div>
+<style>
+.glow-bg {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: -1;
+    overflow: hidden;
+    pointer-events: none;
+}
+.glow-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(70px);
+    opacity: 0.65;
+}
+.glow-orb-1 {
+    width: 420px; height: 420px;
+    background: #2E7D6B;
+    top: -120px; left: -100px;
+}
+.glow-orb-2 {
+    width: 380px; height: 380px;
+    background: #6FBF9B;
+    bottom: -100px; right: -80px;
+}
+.glow-orb-3 {
+    width: 320px; height: 320px;
+    background: #A8D5C0;
+    top: 35%; left: 55%;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -440,13 +500,22 @@ with st.sidebar:
             background-color: rgba(255, 255, 255, 0.06);
         }
         .st-key-input_bar_wrapper {
-            background-color: #2A2A2A !important;
+            background-color: rgba(42, 42, 42, 0.85) !important;
         }
         div[data-testid="stTextInput"] input,
         div[data-testid="stTextArea"] textarea,
         div[data-testid="stSelectbox"] {
             background-color: #2A2A2A !important;
             color: #EAEAEA !important;
+        }
+        .glow-orb {
+            opacity: 0.8 !important;
+        }
+        [data-testid="stChatMessageAvatarUser"] {
+            background-color: rgba(111, 191, 155, 0.30) !important;
+        }
+        [data-testid="stChatMessageAvatarAssistant"] {
+            background-color: rgba(255, 255, 255, 0.12) !important;
         }
         </style>
         """, unsafe_allow_html=True)
@@ -746,23 +815,25 @@ div[data-testid="stForm"] button {
     height: 42px;
     width: 42px;
 }
-/* Pin the whole input bar (mic + form) to the bottom of the screen */
+/* Stick the input bar to the bottom of the main content area (not the whole screen —
+   this keeps it from overlapping the sidebar) */
 .st-key-input_bar_wrapper {
-    position: fixed;
-    bottom: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 90%;
+    position: sticky;
+    bottom: 10px;
+    width: 100%;
     max-width: 700px;
-    background: white;
+    margin: 0 auto;
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-radius: 26px;
     z-index: 999;
-    padding-top: 10px;
-    padding-bottom: 15px;
-    box-shadow: 0 -4px 12px rgba(0,0,0,0.06);
+    padding: 10px 6px;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.08);
 }
-/* Leave room at the bottom of the page so messages aren't hidden behind the bar */
+/* Leave a little room at the bottom of the page so the last message isn't crowded */
 .main .block-container {
-    padding-bottom: 120px;
+    padding-bottom: 40px;
 }
 </style>
 """, unsafe_allow_html=True)

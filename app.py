@@ -5,6 +5,8 @@ import io
 import sqlite3
 import hashlib
 import binascii
+import base64
+import tempfile
 from datetime import datetime
 from dotenv import load_dotenv
 from groq import Groq
@@ -370,27 +372,41 @@ if "mode" not in st.session_state:
     st.session_state.mode = None  # which form is currently open
 
 # ---------- Helper: a button that reads text aloud using the browser's built-in voice ----------
-def speak_button(text, key):
-    safe_text = (
-        text.replace("\\", "\\\\")
-            .replace("`", "\\`")
-            .replace("${", "\\${")
+def generate_speech_audio(text, voice="Fritz-PlayAI"):
+    """Calls Groq's PlayAI text-to-speech model and returns real audio bytes (WAV)."""
+    response = client.audio.speech.create(
+        model="playai-tts",
+        voice=voice,
+        input=text[:2000],  # keep requests reasonably short
+        response_format="wav"
     )
-    html_code = f"""
-    <button onclick="speakText_{key}()" id="btn_{key}"
-        style="padding:6px 14px;border-radius:6px;border:1px solid #d0d0d0;
-        cursor:pointer;background:#f0f2f6;font-size:14px;width:100%;">
-        🔊 Listen
-    </button>
-    <script>
-    function speakText_{key}() {{
-        window.speechSynthesis.cancel();
-        const msg = new SpeechSynthesisUtterance(`{safe_text}`);
-        window.speechSynthesis.speak(msg);
-    }}
-    </script>
-    """
-    components.html(html_code, height=45)
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+        response.write_to_file(tmp.name)
+        tmp_path = tmp.name
+    with open(tmp_path, "rb") as f:
+        audio_bytes = f.read()
+    os.remove(tmp_path)
+    return audio_bytes
+
+def speak_button(text, key):
+    cache_key = f"tts_audio_{key}"
+    if st.button("🔊 Listen", key=f"listen_btn_{key}", use_container_width=True):
+        if cache_key not in st.session_state:
+            with st.spinner("Generating voice..."):
+                try:
+                    voice_choice = st.session_state.get("tts_voice", "Fritz-PlayAI")
+                    st.session_state[cache_key] = generate_speech_audio(text, voice_choice)
+                except Exception as e:
+                    st.error(f"Couldn't generate voice: {e}")
+                    return
+        audio_bytes = st.session_state[cache_key]
+        b64 = base64.b64encode(audio_bytes).decode()
+        html_code = f"""
+        <audio autoplay controls style="width:100%; margin-top:6px;">
+            <source src="data:audio/wav;base64,{b64}" type="audio/wav">
+        </audio>
+        """
+        components.html(html_code, height=60)
 
 # ---------- Helper: turn AI text into a downloadable Word doc ----------
 def text_to_docx_bytes(text):
@@ -483,6 +499,14 @@ with st.sidebar:
         st.session_state.dark_mode = False
     st.session_state.dark_mode = st.toggle("🌙 Dark mode", value=st.session_state.dark_mode)
 
+    if "tts_voice" not in st.session_state:
+        st.session_state.tts_voice = "Fritz-PlayAI"
+    st.session_state.tts_voice = st.selectbox(
+        "🔊 AI voice",
+        ["Fritz-PlayAI", "Aaliyah-PlayAI", "Arista-PlayAI", "Atlas-PlayAI", "Briggs-PlayAI", "Celeste-PlayAI"],
+        index=["Fritz-PlayAI", "Aaliyah-PlayAI", "Arista-PlayAI", "Atlas-PlayAI", "Briggs-PlayAI", "Celeste-PlayAI"].index(st.session_state.tts_voice)
+    )
+
     if st.session_state.dark_mode:
         st.markdown("""
         <style>
@@ -492,6 +516,9 @@ with st.sidebar:
         }
         section[data-testid="stSidebar"] {
             background-color: #2A2A2A;
+        }
+        section[data-testid="stSidebar"] * {
+            color: #EAEAEA !important;
         }
         [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
             background-color: rgba(46, 125, 107, 0.25);
@@ -504,9 +531,51 @@ with st.sidebar:
         }
         div[data-testid="stTextInput"] input,
         div[data-testid="stTextArea"] textarea,
-        div[data-testid="stSelectbox"] {
+        div[data-testid="stSelectbox"] div,
+        div[data-testid="stNumberInput"] input {
             background-color: #2A2A2A !important;
             color: #EAEAEA !important;
+        }
+        /* Buttons everywhere — sidebar, forms, download */
+        button, .stDownloadButton button {
+            background-color: #2E2E2E !important;
+            color: #EAEAEA !important;
+            border: 1px solid #444 !important;
+        }
+        button:hover, .stDownloadButton button:hover {
+            border-color: #6FBF9B !important;
+            color: #6FBF9B !important;
+        }
+        /* Forms, expanders, containers */
+        div[data-testid="stForm"],
+        div[data-testid="stExpander"] {
+            background-color: #242424 !important;
+            border-color: #444 !important;
+        }
+        /* Dividers */
+        hr {
+            border-color: #444 !important;
+        }
+        /* Captions and helper text */
+        [data-testid="stCaptionContainer"], .stCaption, small {
+            color: #AAAAAA !important;
+        }
+        /* Links */
+        a {
+            color: #6FBF9B !important;
+        }
+        /* Placeholder text in inputs */
+        ::placeholder {
+            color: #999999 !important;
+            opacity: 1;
+        }
+        /* Tabs (used on the login screen) */
+        button[data-baseweb="tab"] {
+            color: #AAAAAA !important;
+        }
+        button[data-baseweb="tab"][aria-selected="true"] {
+            color: #6FBF9B !important;
+            border-color: #6FBF9B !important;
         }
         .glow-orb {
             opacity: 0.8 !important;

@@ -439,7 +439,7 @@ with st.sidebar:
         [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarAssistant"]) {
             background-color: rgba(255, 255, 255, 0.06);
         }
-        .st-key-chat_input_form {
+        .st-key-input_bar_wrapper {
             background-color: #2A2A2A !important;
         }
         div[data-testid="stTextInput"] input,
@@ -741,8 +741,13 @@ div[data-testid="stForm"] button {
     border-radius: 20px !important;
     height: 42px;
 }
-/* Pin the chat input bar to the bottom of the screen */
-.st-key-chat_input_form {
+.st-key-input_bar_wrapper button[kind="secondary"] {
+    border-radius: 50% !important;
+    height: 42px;
+    width: 42px;
+}
+/* Pin the whole input bar (mic + form) to the bottom of the screen */
+.st-key-input_bar_wrapper {
     position: fixed;
     bottom: 0;
     left: 50%;
@@ -784,22 +789,25 @@ if st.session_state.show_recorder:
                 except Exception as e:
                     st.error(f"Couldn't transcribe that: {e}")
 
-# ---------- Input row: mic button + text box + send button ----------
+# ---------- Input row: mic button (outside the form) + text box + send button (inside the form) ----------
 user_input = None
-with st.form("chat_input_form", clear_on_submit=True):
-    col_mic, col_text, col_send = st.columns([1, 7, 1])
-    with col_mic:
-        mic_clicked = st.form_submit_button("🎤")
-    with col_text:
-        typed_text = st.text_input(
-            "message", placeholder="Write a message...", label_visibility="collapsed"
-        )
-    with col_send:
-        send_clicked = st.form_submit_button("➤")
 
-if mic_clicked:
-    st.session_state.show_recorder = not st.session_state.show_recorder
-    st.rerun()
+with st.container(key="input_bar_wrapper"):
+    col_mic, col_form = st.columns([1, 9])
+    with col_mic:
+        if st.button("🎤", key="mic_toggle_btn"):
+            st.session_state.show_recorder = not st.session_state.show_recorder
+            st.rerun()
+
+    with col_form:
+        with st.form("chat_input_form", clear_on_submit=True):
+            col_text, col_send = st.columns([8, 1])
+            with col_text:
+                typed_text = st.text_input(
+                    "message", placeholder="Write a message...", label_visibility="collapsed"
+                )
+            with col_send:
+                send_clicked = st.form_submit_button("➤")
 
 if send_clicked and typed_text.strip():
     user_input = typed_text.strip()

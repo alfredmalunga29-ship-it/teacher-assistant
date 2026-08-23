@@ -34,6 +34,40 @@ def get_greeting():
     else:
         return "Good evening"
 
+# ---------- General UI polish: chat bubbles, spacing, rounded controls ----------
+st.markdown("""
+<style>
+/* Chat bubble styling — different tint for user vs assistant */
+[data-testid="stChatMessage"] {
+    border-radius: 16px;
+    padding: 10px 16px;
+    margin-bottom: 10px;
+}
+[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
+    background-color: rgba(46, 125, 107, 0.08);
+}
+[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarAssistant"]) {
+    background-color: rgba(0, 0, 0, 0.035);
+}
+
+/* Sidebar button spacing — slightly tighter, consistent rounding */
+section[data-testid="stSidebar"] button {
+    border-radius: 10px !important;
+    margin-bottom: 2px;
+}
+
+/* General rounded corners on form containers and expanders */
+div[data-testid="stExpander"] {
+    border-radius: 14px;
+}
+
+/* Reduce default top padding so the greeting sits closer to the top */
+.main .block-container {
+    padding-top: 2rem;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # ---------- Database setup (saves chats to a local file, organized into separate conversations) ----------
 DB_PATH = "chat_history.db"
 
@@ -384,6 +418,39 @@ def read_uploaded_file(uploaded_file):
 with st.sidebar:
     st.markdown("### 🧑‍🏫 Teacher Assistant")
     st.caption(f"👤 Logged in as **{st.session_state.username}**")
+
+    if "dark_mode" not in st.session_state:
+        st.session_state.dark_mode = False
+    st.session_state.dark_mode = st.toggle("🌙 Dark mode", value=st.session_state.dark_mode)
+
+    if st.session_state.dark_mode:
+        st.markdown("""
+        <style>
+        .stApp {
+            background-color: #1E1E1E;
+            color: #EAEAEA;
+        }
+        section[data-testid="stSidebar"] {
+            background-color: #2A2A2A;
+        }
+        [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
+            background-color: rgba(46, 125, 107, 0.25);
+        }
+        [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarAssistant"]) {
+            background-color: rgba(255, 255, 255, 0.06);
+        }
+        .st-key-chat_input_form {
+            background-color: #2A2A2A !important;
+        }
+        div[data-testid="stTextInput"] input,
+        div[data-testid="stTextArea"] textarea,
+        div[data-testid="stSelectbox"] {
+            background-color: #2A2A2A !important;
+            color: #EAEAEA !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
     if st.button("🚪 Log Out", use_container_width=True):
         for key in ["user_id", "username", "current_conversation_id", "messages", "mode", "teacher_name"]:
             if key in st.session_state:
@@ -620,7 +687,8 @@ if len(st.session_state.messages) == 0 and st.session_state.mode is None:
 
 # ---------- Show past messages (with download/edit for assistant replies) ----------
 for i, msg in enumerate(st.session_state.messages):
-    with st.chat_message(msg["role"]):
+    avatar = "🧑‍🏫" if msg["role"] == "user" else "🤖"
+    with st.chat_message(msg["role"], avatar=avatar):
         if msg["role"] == "assistant":
             edit_key = f"edit_mode_{i}"
             if edit_key not in st.session_state:
@@ -755,11 +823,11 @@ if user_input:
     # Show the user's message and save it to the database
     user_msg_id = save_message(st.session_state.current_conversation_id, "user", user_input)
     st.session_state.messages.append({"id": user_msg_id, "role": "user", "content": user_input})
-    with st.chat_message("user"):
+    with st.chat_message("user", avatar="🧑‍🏫"):
         st.write(user_input)
 
     # Send it to Groq and show the reply
-    with st.chat_message("assistant"):
+    with st.chat_message("assistant", avatar="🤖"):
         with st.spinner("Thinking..."):
             try:
                 response = client.chat.completions.create(

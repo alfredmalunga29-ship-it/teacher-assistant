@@ -567,11 +567,16 @@ with st.sidebar:
         button, .stDownloadButton button {
             background-color: #1C1C1C !important;
             color: #EAEAEA !important;
-            border: 1px solid #333 !important;
+            border: 1px solid #3A3A3A !important;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
         }
         button:hover, .stDownloadButton button:hover {
             border-color: #8FE388 !important;
             color: #8FE388 !important;
+        }
+        /* Consistent breathing room between stacked buttons */
+        div[data-testid="stVerticalBlock"] > div:has(> div > button) {
+            margin-bottom: 2px;
         }
         /* New Chat button — bright accent, like the reference's green pill */
         .st-key-new_chat_btn button {
@@ -693,10 +698,10 @@ with st.sidebar:
                 st.rerun()
 
 # ---------- Top-right controls: bookmark / settings / feedback (in-flow, no floating tricks) ----------
-top_col1, top_col2, top_col3, top_col4 = st.columns([5, 1, 1, 1])
+top_col1, top_col2, top_col3, top_col4 = st.columns([8, 1, 1, 1], gap="small")
 with top_col2:
-    if st.button("🔖", key="rail_bookmark", help="Chats save automatically"):
-        st.toast("💾 All your chats save automatically — nothing to bookmark!")
+    if st.button("✅", key="rail_bookmark", help="Chats save automatically"):
+        st.toast("✅ All your chats save automatically — nothing to bookmark!")
 
 with top_col3:
     with st.popover("🛠️", help="Quick settings"):

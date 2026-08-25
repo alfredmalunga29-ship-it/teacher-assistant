@@ -148,6 +148,15 @@ def init_db():
     """)
 
     conn.execute("""
+        CREATE TABLE IF NOT EXISTS feedback (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            message TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS conversations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
@@ -247,6 +256,12 @@ def authenticate_user(username, password):
     if verify_password(password, pw_hash, salt):
         return user_id
     return None
+
+def save_feedback(user_id, message):
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("INSERT INTO feedback (user_id, message) VALUES (?, ?)", (user_id, message))
+    conn.commit()
+    conn.close()
 
 def list_conversations(user_id):
     conn = sqlite3.connect(DB_PATH)
@@ -497,94 +512,127 @@ with st.sidebar:
 
     if "dark_mode" not in st.session_state:
         st.session_state.dark_mode = False
-    st.session_state.dark_mode = st.toggle("🌙 Dark mode", value=st.session_state.dark_mode)
+
+    # These are real buttons (not dead decoration) — clicking them is honest about
+    # not being built yet, instead of looking broken with no response at all
+    if st.session_state.dark_mode:
+        if st.button("🧭 Explore", key="nav_explore", use_container_width=True):
+            st.toast("🚧 Explore isn't built yet — coming in a future update!")
+        if st.button("🗂️ Categories", key="nav_categories", use_container_width=True):
+            st.toast("🚧 Categories isn't built yet — coming in a future update!")
+        if st.button("📚 Library", key="nav_library", use_container_width=True):
+            st.toast("🚧 Library isn't built yet — coming in a future update!")
 
     if "tts_voice" not in st.session_state:
         st.session_state.tts_voice = "Fritz-PlayAI"
-    st.session_state.tts_voice = st.selectbox(
-        "🔊 AI voice",
-        ["Fritz-PlayAI", "Aaliyah-PlayAI", "Arista-PlayAI", "Atlas-PlayAI", "Briggs-PlayAI", "Celeste-PlayAI"],
-        index=["Fritz-PlayAI", "Aaliyah-PlayAI", "Arista-PlayAI", "Atlas-PlayAI", "Briggs-PlayAI", "Celeste-PlayAI"].index(st.session_state.tts_voice)
-    )
 
     if st.session_state.dark_mode:
         st.markdown("""
         <style>
         .stApp {
-            background-color: #1E1E1E;
+            background-color: #0F0F0F;
             color: #EAEAEA;
         }
         section[data-testid="stSidebar"] {
-            background-color: #2A2A2A;
+            background-color: #161616;
         }
         section[data-testid="stSidebar"] * {
             color: #EAEAEA !important;
         }
+        /* User bubble: dark gray card, right-aligned like the reference */
         [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
-            background-color: rgba(46, 125, 107, 0.25);
+            background-color: #262626 !important;
+            flex-direction: row-reverse;
+            margin-left: auto;
+            max-width: 75%;
+            border-radius: 18px;
         }
+        /* Assistant message: no bubble, just plain text on the dark background */
         [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarAssistant"]) {
-            background-color: rgba(255, 255, 255, 0.06);
+            background-color: transparent !important;
+            max-width: 100%;
         }
         .st-key-input_bar_wrapper {
-            background-color: rgba(42, 42, 42, 0.85) !important;
+            background-color: rgba(28, 28, 28, 0.9) !important;
+            border: 1px solid #333 !important;
         }
         div[data-testid="stTextInput"] input,
         div[data-testid="stTextArea"] textarea,
         div[data-testid="stSelectbox"] div,
         div[data-testid="stNumberInput"] input {
-            background-color: #2A2A2A !important;
+            background-color: #1C1C1C !important;
             color: #EAEAEA !important;
         }
         /* Buttons everywhere — sidebar, forms, download */
         button, .stDownloadButton button {
-            background-color: #2E2E2E !important;
+            background-color: #1C1C1C !important;
             color: #EAEAEA !important;
-            border: 1px solid #444 !important;
+            border: 1px solid #333 !important;
         }
         button:hover, .stDownloadButton button:hover {
-            border-color: #6FBF9B !important;
-            color: #6FBF9B !important;
+            border-color: #8FE388 !important;
+            color: #8FE388 !important;
+        }
+        /* New Chat button — bright accent, like the reference's green pill */
+        .st-key-new_chat_btn button {
+            background-color: #8FE388 !important;
+            color: #0F0F0F !important;
+            border: none !important;
+            font-weight: 600;
+        }
+        .st-key-new_chat_btn button:hover {
+            background-color: #A6EE9F !important;
+            color: #0F0F0F !important;
         }
         /* Forms, expanders, containers */
         div[data-testid="stForm"],
         div[data-testid="stExpander"] {
-            background-color: #242424 !important;
-            border-color: #444 !important;
+            background-color: #171717 !important;
+            border-color: #333 !important;
+        }
+        /* Dark, rounded code blocks */
+        pre, code {
+            background-color: #1A1A1A !important;
+            color: #D4D4D4 !important;
+            border-radius: 10px !important;
+        }
+        pre {
+            padding: 12px !important;
+            border: 1px solid #2E2E2E !important;
         }
         /* Dividers */
         hr {
-            border-color: #444 !important;
+            border-color: #333 !important;
         }
         /* Captions and helper text */
         [data-testid="stCaptionContainer"], .stCaption, small {
-            color: #AAAAAA !important;
+            color: #999999 !important;
         }
         /* Links */
         a {
-            color: #6FBF9B !important;
+            color: #8FE388 !important;
         }
         /* Placeholder text in inputs */
         ::placeholder {
-            color: #999999 !important;
+            color: #888888 !important;
             opacity: 1;
         }
         /* Tabs (used on the login screen) */
         button[data-baseweb="tab"] {
-            color: #AAAAAA !important;
+            color: #999999 !important;
         }
         button[data-baseweb="tab"][aria-selected="true"] {
-            color: #6FBF9B !important;
-            border-color: #6FBF9B !important;
+            color: #8FE388 !important;
+            border-color: #8FE388 !important;
         }
         .glow-orb {
-            opacity: 0.8 !important;
+            opacity: 0.5 !important;
         }
         [data-testid="stChatMessageAvatarUser"] {
-            background-color: rgba(111, 191, 155, 0.30) !important;
+            background-color: rgba(143, 227, 136, 0.25) !important;
         }
         [data-testid="stChatMessageAvatarAssistant"] {
-            background-color: rgba(255, 255, 255, 0.12) !important;
+            background-color: rgba(255, 255, 255, 0.10) !important;
         }
         </style>
         """, unsafe_allow_html=True)
@@ -612,7 +660,7 @@ with st.sidebar:
         st.session_state.mode = "notes"
 
     st.divider()
-    if st.button("➕ New Chat", use_container_width=True):
+    if st.button("➕ New Chat", use_container_width=True, key="new_chat_btn"):
         new_id = create_conversation(st.session_state.user_id)
         st.session_state.current_conversation_id = new_id
         st.session_state.messages = []
@@ -643,6 +691,34 @@ with st.sidebar:
                         st.session_state.current_conversation_id = create_conversation(st.session_state.user_id)
                         st.session_state.messages = []
                 st.rerun()
+
+# ---------- Top-right controls: bookmark / settings / feedback (in-flow, no floating tricks) ----------
+top_col1, top_col2, top_col3, top_col4 = st.columns([5, 1, 1, 1])
+with top_col2:
+    if st.button("🔖", key="rail_bookmark", help="Chats save automatically"):
+        st.toast("💾 All your chats save automatically — nothing to bookmark!")
+
+with top_col3:
+    with st.popover("🛠️", help="Quick settings"):
+        st.write("**Quick Settings**")
+        st.session_state.dark_mode = st.toggle("🌙 Dark mode", value=st.session_state.dark_mode, key="rail_dark_toggle")
+        voice_options = ["Fritz-PlayAI", "Aaliyah-PlayAI", "Arista-PlayAI", "Atlas-PlayAI", "Briggs-PlayAI", "Celeste-PlayAI"]
+        st.session_state.tts_voice = st.selectbox(
+            "🔊 AI voice", voice_options,
+            index=voice_options.index(st.session_state.tts_voice),
+            key="rail_voice_select"
+        )
+
+with top_col4:
+    with st.popover("🚩", help="Send feedback"):
+        st.write("**Send Feedback**")
+        fb_text = st.text_area("What's on your mind?", key="feedback_text")
+        if st.button("Submit", key="feedback_submit"):
+            if fb_text.strip():
+                save_feedback(st.session_state.user_id, fb_text.strip())
+                st.success("Thanks! Your feedback was saved.")
+            else:
+                st.warning("Type something first.")
 
 # ---------- Greeting + example prompts (shown at the top of the main area) ----------
 greeting_name = f", {st.session_state.username}" if st.session_state.username else ""
@@ -948,6 +1024,20 @@ with st.container(key="input_bar_wrapper"):
                 )
             with col_send:
                 send_clicked = st.form_submit_button("➤")
+
+if st.session_state.dark_mode:
+    tag_col1, tag_col2, tag_col3, tag_col4, tag_col5 = st.columns(5)
+    tag_labels = [
+        ("💡 Brainstorm", "nav_brainstorm"),
+        ("🌐 Web search", "nav_websearch"),
+        ("💻 Code", "nav_code"),
+        ("🎓 Get Advice", "nav_advice"),
+        ("⋯ More", "nav_more"),
+    ]
+    for col, (label, key) in zip([tag_col1, tag_col2, tag_col3, tag_col4, tag_col5], tag_labels):
+        with col:
+            if st.button(label, key=key, use_container_width=True):
+                st.toast(f"🚧 {label.split(' ', 1)[1]} isn't built yet — coming in a future update!")
 
 if send_clicked and typed_text.strip():
     user_input = typed_text.strip()

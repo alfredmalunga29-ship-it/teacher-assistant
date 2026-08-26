@@ -531,6 +531,21 @@ with st.sidebar:
 
     if "tts_voice" not in st.session_state:
         st.session_state.tts_voice = "autumn"
+    voice_options = ["autumn", "diana", "hannah", "austin", "daniel", "troy"]
+    st.session_state.tts_voice = st.selectbox(
+        "🔊 AI voice", voice_options,
+        index=voice_options.index(st.session_state.tts_voice),
+        key="sidebar_voice_select"
+    )
+
+    with st.popover("🚩 Send feedback", use_container_width=True):
+        fb_text = st.text_area("What's on your mind?", key="feedback_text")
+        if st.button("Submit", key="feedback_submit"):
+            if fb_text.strip():
+                save_feedback(st.session_state.user_id, fb_text.strip())
+                st.success("Thanks! Your feedback was saved.")
+            else:
+                st.warning("Type something first.")
 
     # Real, working nav — shown in both light and dark mode
     if st.button("🧭 Explore", key="nav_explore", use_container_width=True):
@@ -540,12 +555,16 @@ with st.sidebar:
         for label, prompt_text in [
             ("📝 Make a lesson plan", "Create a lesson plan for a topic I'll describe"),
             ("❓ Build a quick quiz", "Create a short quiz on a topic I'll describe"),
-            ("💡 Brainstorm ideas", "Help me brainstorm creative teaching ideas for a topic I'll describe"),
+            ("💡 Brainstorm", "Help me brainstorm creative teaching ideas for a topic I'll describe"),
+            ("💻 Code", "Help me write or fix a spreadsheet formula, script, or piece of code for a classroom task I'll describe."),
+            ("🎓 Get Advice", "Give me practical teaching advice on a classroom challenge I'll describe."),
         ]:
             if st.button(label, key=f"explore_{label}", use_container_width=True):
                 st.session_state.pending_voice_prompt = prompt_text
                 st.session_state.show_explore = False
                 st.rerun()
+        if st.button("🌐 Web search", key="explore_websearch", use_container_width=True, help="Needs a separate search API — not connected yet"):
+            st.toast("🌐 Web search needs a separate search service to be connected first.")
 
     if st.button("🗂️ Categories", key="nav_categories", use_container_width=True):
         st.session_state.show_categories = not st.session_state.get("show_categories", False)
@@ -595,8 +614,10 @@ with st.sidebar:
             max-width: 100%;
         }
         .st-key-input_bar_wrapper {
-            background-color: rgba(28, 28, 28, 0.9) !important;
-            border: 1px solid #333 !important;
+            background:
+                linear-gradient(rgba(28,28,28,0.92), rgba(28,28,28,0.92)) padding-box,
+                linear-gradient(90deg, #EA4335, #4285F4, #34A853, #FBBC05, #EA4335) border-box !important;
+            background-size: 100% 100%, 300% 100% !important;
         }
         div[data-testid="stTextInput"] input,
         div[data-testid="stTextArea"] textarea,
@@ -738,34 +759,6 @@ with st.sidebar:
                         st.session_state.current_conversation_id = create_conversation(st.session_state.user_id)
                         st.session_state.messages = []
                 st.rerun()
-
-# ---------- Top-right controls: bookmark / settings / feedback (in-flow, no floating tricks) ----------
-top_col1, top_col2, top_col3, top_col4 = st.columns([8, 1, 1, 1], gap="small")
-with top_col2:
-    if st.button("✅", key="rail_bookmark", help="Chats save automatically"):
-        st.toast("✅ All your chats save automatically — nothing to bookmark!")
-
-with top_col3:
-    with st.popover("🛠️", help="Quick settings"):
-        st.write("**Quick Settings**")
-        st.caption("🌙 Dark mode is in the sidebar")
-        voice_options = ["autumn", "diana", "hannah", "austin", "daniel", "troy"]
-        st.session_state.tts_voice = st.selectbox(
-            "🔊 AI voice", voice_options,
-            index=voice_options.index(st.session_state.tts_voice),
-            key="rail_voice_select"
-        )
-
-with top_col4:
-    with st.popover("🚩", help="Send feedback"):
-        st.write("**Send Feedback**")
-        fb_text = st.text_area("What's on your mind?", key="feedback_text")
-        if st.button("Submit", key="feedback_submit"):
-            if fb_text.strip():
-                save_feedback(st.session_state.user_id, fb_text.strip())
-                st.success("Thanks! Your feedback was saved.")
-            else:
-                st.warning("Type something first.")
 
 # ---------- Greeting + example prompts (shown at the top of the main area) ----------
 greeting_name = f", {st.session_state.username}" if st.session_state.username else ""
@@ -1015,13 +1008,20 @@ div[data-testid="stForm"] button {
     width: 100%;
     max-width: 700px;
     margin: 0 auto;
-    background: rgba(255, 255, 255, 0.85);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
     border-radius: 26px;
     z-index: 999;
-    padding: 10px 6px;
-    box-shadow: 0 4px 18px rgba(0,0,0,0.08);
+    padding: 12px 8px;
+    border: 2px solid transparent;
+    background:
+        linear-gradient(rgba(255,255,255,0.9), rgba(255,255,255,0.9)) padding-box,
+        linear-gradient(90deg, #EA4335, #4285F4, #34A853, #FBBC05, #EA4335) border-box;
+    background-size: 100% 100%, 300% 100%;
+    animation: glow-border-shift 6s linear infinite;
+    box-shadow: 0 4px 24px rgba(66, 133, 244, 0.15), 0 4px 18px rgba(0,0,0,0.06);
+}
+@keyframes glow-border-shift {
+    0% { background-position: 0 0, 0% 0; }
+    100% { background-position: 0 0, 300% 0; }
 }
 /* Leave a little room at the bottom of the page so the last message isn't crowded */
 .main .block-container {
@@ -1071,26 +1071,6 @@ with st.container(key="input_bar_wrapper"):
                 )
             with col_send:
                 send_clicked = st.form_submit_button("➤")
-
-functional_tags = {
-    "💡 Brainstorm": "Help me brainstorm creative teaching ideas for a topic I'll describe.",
-    "💻 Code": "Help me write or fix a spreadsheet formula, script, or piece of code for a classroom task I'll describe.",
-    "🎓 Get Advice": "Give me practical teaching advice on a classroom challenge I'll describe.",
-}
-
-tag_col1, tag_col2, tag_col3, tag_col4 = st.columns(4)
-with tag_col1:
-    if st.button("💡 Brainstorm", key="nav_brainstorm", use_container_width=True):
-        quick_prompt = functional_tags["💡 Brainstorm"]
-with tag_col2:
-    if st.button("🌐 Web search", key="nav_websearch", use_container_width=True, help="Needs a separate search API — not connected yet"):
-        st.toast("🌐 Web search needs a separate search service to be connected first — ask to have this built if you want it!")
-with tag_col3:
-    if st.button("💻 Code", key="nav_code", use_container_width=True):
-        quick_prompt = functional_tags["💻 Code"]
-with tag_col4:
-    if st.button("🎓 Get Advice", key="nav_advice", use_container_width=True):
-        quick_prompt = functional_tags["🎓 Get Advice"]
 
 if send_clicked and typed_text.strip():
     user_input = typed_text.strip()

@@ -301,6 +301,19 @@ def load_messages(conversation_id):
     conn.close()
     return [{"id": r[0], "role": r[1], "content": r[2]} for r in rows]
 
+def list_all_assistant_messages(user_id):
+    """All AI-generated documents across every one of this teacher's chats — newest first."""
+    conn = sqlite3.connect(DB_PATH)
+    rows = conn.execute("""
+        SELECT messages.id, messages.content
+        FROM messages
+        JOIN conversations ON messages.conversation_id = conversations.id
+        WHERE conversations.user_id = ? AND messages.role = 'assistant'
+        ORDER BY messages.id DESC
+    """, (user_id,)).fetchall()
+    conn.close()
+    return [{"id": r[0], "content": r[1]} for r in rows]
+
 def save_message(conversation_id, role, content):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.execute(
@@ -387,10 +400,11 @@ if "mode" not in st.session_state:
     st.session_state.mode = None  # which form is currently open
 
 # ---------- Helper: a button that reads text aloud using the browser's built-in voice ----------
-def generate_speech_audio(text, voice="Fritz-PlayAI"):
-    """Calls Groq's PlayAI text-to-speech model and returns real audio bytes (WAV)."""
+def generate_speech_audio(text, voice="autumn"):
+    """Calls Groq's Orpheus text-to-speech model and returns real audio bytes (WAV).
+    (Groq retired the older PlayAI models in favor of Orpheus.)"""
     response = client.audio.speech.create(
-        model="playai-tts",
+        model="canopylabs/orpheus-v1-english",
         voice=voice,
         input=text[:2000],  # keep requests reasonably short
         response_format="wav"
@@ -409,7 +423,7 @@ def speak_button(text, key):
         if cache_key not in st.session_state:
             with st.spinner("Generating voice..."):
                 try:
-                    voice_choice = st.session_state.get("tts_voice", "Fritz-PlayAI")
+                    voice_choice = st.session_state.get("tts_voice", "autumn")
                     st.session_state[cache_key] = generate_speech_audio(text, voice_choice)
                 except Exception as e:
                     st.error(f"Couldn't generate voice: {e}")
@@ -512,19 +526,47 @@ with st.sidebar:
 
     if "dark_mode" not in st.session_state:
         st.session_state.dark_mode = False
-
-    # These are real buttons (not dead decoration) — clicking them is honest about
-    # not being built yet, instead of looking broken with no response at all
-    if st.session_state.dark_mode:
-        if st.button("🧭 Explore", key="nav_explore", use_container_width=True):
-            st.toast("🚧 Explore isn't built yet — coming in a future update!")
-        if st.button("🗂️ Categories", key="nav_categories", use_container_width=True):
-            st.toast("🚧 Categories isn't built yet — coming in a future update!")
-        if st.button("📚 Library", key="nav_library", use_container_width=True):
-            st.toast("🚧 Library isn't built yet — coming in a future update!")
+    # A plain, direct toggle — applies immediately on click, no popover involved
+    st.session_state.dark_mode = st.toggle("🌙 Dark mode", value=st.session_state.dark_mode, key="main_dark_toggle")
 
     if "tts_voice" not in st.session_state:
-        st.session_state.tts_voice = "Fritz-PlayAI"
+        st.session_state.tts_voice = "autumn"
+
+    # Real, working nav — shown in both light and dark mode
+    if st.button("🧭 Explore", key="nav_explore", use_container_width=True):
+        st.session_state.show_explore = not st.session_state.get("show_explore", False)
+    if st.session_state.get("show_explore"):
+        st.caption("Quick things to try:")
+        for label, prompt_text in [
+            ("📝 Make a lesson plan", "Create a lesson plan for a topic I'll describe"),
+            ("❓ Build a quick quiz", "Create a short quiz on a topic I'll describe"),
+            ("💡 Brainstorm ideas", "Help me brainstorm creative teaching ideas for a topic I'll describe"),
+        ]:
+            if st.button(label, key=f"explore_{label}", use_container_width=True):
+                st.session_state.pending_voice_prompt = prompt_text
+                st.session_state.show_explore = False
+                st.rerun()
+
+    if st.button("🗂️ Categories", key="nav_categories", use_container_width=True):
+        st.session_state.show_categories = not st.session_state.get("show_categories", False)
+    if st.session_state.get("show_categories"):
+        st.caption("📝 **Lesson Plan** — structured plans with objectives & stages")
+        st.caption("❓ **Quiz/Test** — sectioned exams with mark allocations")
+        st.caption("📋 **Assignment** — scenario-based tasks")
+        st.caption("💬 **Report Comment** — student report card comments")
+        st.caption("📄 **Summarize Doc** — condense an uploaded file")
+        st.caption("📓 **Generate Notes** — study notes on a topic")
+
+    if st.button("📚 Library", key="nav_library", use_container_width=True):
+        st.session_state.show_library = not st.session_state.get("show_library", False)
+    if st.session_state.get("show_library"):
+        library_docs = list_all_assistant_messages(st.session_state.user_id)
+        if not library_docs:
+            st.caption("Nothing generated yet — your documents will appear here.")
+        else:
+            for doc_row in library_docs[:15]:
+                doc_preview = doc_row["content"].strip().split("\n")[0][:45]
+                st.caption(f"📄 {doc_preview}...")
 
     if st.session_state.dark_mode:
         st.markdown("""
@@ -706,8 +748,8 @@ with top_col2:
 with top_col3:
     with st.popover("🛠️", help="Quick settings"):
         st.write("**Quick Settings**")
-        st.session_state.dark_mode = st.toggle("🌙 Dark mode", value=st.session_state.dark_mode, key="rail_dark_toggle")
-        voice_options = ["Fritz-PlayAI", "Aaliyah-PlayAI", "Arista-PlayAI", "Atlas-PlayAI", "Briggs-PlayAI", "Celeste-PlayAI"]
+        st.caption("🌙 Dark mode is in the sidebar")
+        voice_options = ["autumn", "diana", "hannah", "austin", "daniel", "troy"]
         st.session_state.tts_voice = st.selectbox(
             "🔊 AI voice", voice_options,
             index=voice_options.index(st.session_state.tts_voice),
@@ -1030,19 +1072,25 @@ with st.container(key="input_bar_wrapper"):
             with col_send:
                 send_clicked = st.form_submit_button("➤")
 
-if st.session_state.dark_mode:
-    tag_col1, tag_col2, tag_col3, tag_col4, tag_col5 = st.columns(5)
-    tag_labels = [
-        ("💡 Brainstorm", "nav_brainstorm"),
-        ("🌐 Web search", "nav_websearch"),
-        ("💻 Code", "nav_code"),
-        ("🎓 Get Advice", "nav_advice"),
-        ("⋯ More", "nav_more"),
-    ]
-    for col, (label, key) in zip([tag_col1, tag_col2, tag_col3, tag_col4, tag_col5], tag_labels):
-        with col:
-            if st.button(label, key=key, use_container_width=True):
-                st.toast(f"🚧 {label.split(' ', 1)[1]} isn't built yet — coming in a future update!")
+functional_tags = {
+    "💡 Brainstorm": "Help me brainstorm creative teaching ideas for a topic I'll describe.",
+    "💻 Code": "Help me write or fix a spreadsheet formula, script, or piece of code for a classroom task I'll describe.",
+    "🎓 Get Advice": "Give me practical teaching advice on a classroom challenge I'll describe.",
+}
+
+tag_col1, tag_col2, tag_col3, tag_col4 = st.columns(4)
+with tag_col1:
+    if st.button("💡 Brainstorm", key="nav_brainstorm", use_container_width=True):
+        quick_prompt = functional_tags["💡 Brainstorm"]
+with tag_col2:
+    if st.button("🌐 Web search", key="nav_websearch", use_container_width=True, help="Needs a separate search API — not connected yet"):
+        st.toast("🌐 Web search needs a separate search service to be connected first — ask to have this built if you want it!")
+with tag_col3:
+    if st.button("💻 Code", key="nav_code", use_container_width=True):
+        quick_prompt = functional_tags["💻 Code"]
+with tag_col4:
+    if st.button("🎓 Get Advice", key="nav_advice", use_container_width=True):
+        quick_prompt = functional_tags["🎓 Get Advice"]
 
 if send_clicked and typed_text.strip():
     user_input = typed_text.strip()

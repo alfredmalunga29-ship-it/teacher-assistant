@@ -26,6 +26,9 @@ load_dotenv()
 groq_api_key = os.getenv("GROQ_API_KEY") or st.secrets.get("GROQ_API_KEY", None)
 client = Groq(api_key=groq_api_key, timeout=60.0)
 
+# A secret code shared only with teachers — required to create an account, so students can't sign up
+TEACHER_ACCESS_CODE = os.getenv("TEACHER_ACCESS_CODE") or st.secrets.get("TEACHER_ACCESS_CODE", None)
+
 # ---------- Helper: time-based greeting ----------
 def get_greeting():
     hour = datetime.now().hour
@@ -362,14 +365,20 @@ if st.session_state.user_id is None:
 
     with signup_tab:
         with st.form("signup_form"):
+            st.caption("Ask your school admin for the teacher access code if you don't have one.")
             new_username = st.text_input("Choose a username")
             new_password = st.text_input("Choose a password", type="password")
             confirm_password = st.text_input("Confirm password", type="password")
+            entered_access_code = st.text_input("Teacher access code", type="password")
             signup_submitted = st.form_submit_button("Create Account")
 
             if signup_submitted:
-                if not new_username or not new_password:
+                if not new_username or not new_password or not entered_access_code:
                     st.warning("Please fill in all fields.")
+                elif not TEACHER_ACCESS_CODE:
+                    st.error("Sign-up isn't configured yet — the site admin needs to set a teacher access code.")
+                elif entered_access_code != TEACHER_ACCESS_CODE:
+                    st.error("That access code isn't correct. Ask your school admin for the right one.")
                 elif new_password != confirm_password:
                     st.warning("Passwords don't match.")
                 elif len(new_password) < 6:

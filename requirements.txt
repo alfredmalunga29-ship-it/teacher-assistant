@@ -1,5 +1,4 @@
-streamlit>=1.38.0
-groq
+flask
+google-genai
 python-dotenv
-python-docx
-pypdf
+libsql-client

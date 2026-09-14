@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teacher Assistant</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='chat.css') }}">
+</head>
+<body>
+    <div class="layout">
+        <aside class="sidebar">
+            <div class="sidebar-top">
+                <span class="logo">🧑‍🏫</span>
+                <h1>Teacher Assistant</h1>
+            </div>
+            <p class="user-caption">👤 Logged in as <strong>{{ full_name }}</strong></p>
+
+            <button id="new-chat-btn" class="new-chat-btn">➕ New Chat</button>
+
+            <p class="section-label">QUICK ACTIONS</p>
+            <button class="quick-action" data-prompt="Create a lesson plan. Ask me for the subject, grade level, and topic if I haven't given them yet.">📝 Lesson Plan</button>
+            <button class="quick-action" data-prompt="Create a quiz. Ask me for the subject, grade level, topic, and number of questions if I haven't given them yet.">❓ Quiz / Test</button>
+            <button class="quick-action" data-prompt="Create an assignment. Ask me for the subject and topics if I haven't given them yet.">📋 Assignment</button>
+            <button class="quick-action" data-prompt="Write a report card comment. Ask me for the student's grade/performance level and any behavior notes if I haven't given them yet.">💬 Report Comment</button>
+
+            <div class="sidebar-bottom">
+                <a href="{{ url_for('logout') }}" class="logout-link">🚪 Log Out</a>
+            </div>
+        </aside>
+
+        <main class="main">
+            <div class="chat-window" id="chat-window">
+                {% if not messages %}
+                    <div class="empty-state">
+                        <p>👋 Ask me to make a lesson plan, a quiz, or a report card comment.</p>
+                    </div>
+                {% endif %}
+                {% for msg in messages %}
+                    <div class="message {{ msg.role }}">
+                        <div class="bubble">{{ msg.content }}</div>
+                    </div>
+                {% endfor %}
+            </div>
+
+            <form id="chat-form" class="input-bar">
+                <input type="text" id="message-input" placeholder="Type your request..." autocomplete="off">
+                <button type="submit">➤</button>
+            </form>
+        </main>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.2/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+    <script src="{{ url_for('static', filename='chat.js') }}"></script>
+</body>
+</html>

@@ -7,7 +7,8 @@ import libsql_client
 from dotenv import load_dotenv
 from google import genai
 
-load_dotenv()
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 # A blunt but effective safety net: without this, a database or network hiccup could
 # hang a request indefinitely with no error at all. 10 seconds is generous enough for
@@ -17,7 +18,30 @@ socket.setdefaulttimeout(10)
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-secret-change-me")
 
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+
+def require_env(name):
+    value = os.getenv(name)
+    if not value:
+        raise RuntimeError(
+            f"Missing required environment variable: {name}. "
+            "Copy .env.example to .env and fill in the value before starting the app."
+        )
+    return value
+
+
+client = None
+
+
+def get_gemini_client():
+    global client
+    if client is not None:
+        return client
+    try:
+        client = genai.Client(api_key=require_env("GEMINI_API_KEY"))
+        return client
+    except Exception as exc:
+        print(f"Warning: Gemini client could not be initialized: {exc}")
+        return None
 
 SYSTEM_INSTRUCTION = (
     "You are a helpful assistant for teachers. You help create lesson plans, "
@@ -36,6 +60,11 @@ TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN")
 
 
 def get_db_client():
+    if not TURSO_DATABASE_URL or not TURSO_AUTH_TOKEN:
+        raise RuntimeError(
+            "Missing Turso configuration. Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN "
+            "in the environment before using the database."
+        )
     connect_url = TURSO_DATABASE_URL.replace("libsql://", "https://")
     return libsql_client.create_client_sync(url=connect_url, auth_token=TURSO_AUTH_TOKEN)
 
@@ -53,13 +82,6 @@ def init_db():
         )
     """)
 
-try:
-    init_db()
-except Exception as e:
-    # Don't crash the whole app if the database is briefly unreachable on startup —
-    # individual routes below already catch and report database errors gracefully.
-    print(f"Warning: couldn't initialize the database on startup: {e}")
-
 
 # ---------- Password hashing (same approach as the original Streamlit app) ----------
 def hash_password(password, salt=None):
@@ -76,6 +98,7 @@ def verify_password(password, stored_hash, stored_salt):
 
 
 def create_user(full_name, email, password):
+    init_db()
     db = get_db_client()
     existing = db.execute("SELECT id FROM users WHERE email = ?", [email]).rows
     if existing:
@@ -89,6 +112,7 @@ def create_user(full_name, email, password):
 
 
 def authenticate_user(email, password):
+    init_db()
     db = get_db_client()
     rows = db.execute(
         "SELECT id, full_name, password_hash, salt FROM users WHERE email = ?", [email]
@@ -181,8 +205,12 @@ def send():
 
     session["chat_history"].append({"role": "user", "content": user_message})
 
+    gemini_client = get_gemini_client()
+    if gemini_client is None:
+        return jsonify({"error": "Gemini is not configured. Set GEMINI_API_KEY in the environment before sending a message."}), 503
+
     try:
-        chat = client.chats.create(model=MODEL_NAME)
+        chat = gemini_client.chats.create(model=MODEL_NAME)
         response = chat.send_message(f"{SYSTEM_INSTRUCTION}\n\nTeacher's request: {user_message}")
         reply = response.text
     except Exception as e:

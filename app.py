@@ -48,10 +48,10 @@ SYSTEM_INSTRUCTION = (
     "quizzes, grading rubrics, and report card comments. Be practical and concise."
 )
 
-# "gemini-flash-latest" is a floating alias Google keeps pointed at their current
+# "gemini-2.5-flash" is a floating alias Google keeps pointed at their current
 # recommended fast model — this avoids hard-coding a specific dated model name
 # that could get deprecated later (exactly what happened with Groq's playai-tts).
-MODEL_NAME = "gemini-flash-latest"
+MODEL_NAME = "gemini-2.5-flash"
 
 
 # ---------- Database (Turso) ----------

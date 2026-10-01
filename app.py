@@ -6,6 +6,7 @@ import binascii
 import libsql_client
 from dotenv import load_dotenv
 from google import genai
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(BASE_DIR, ".env"))
@@ -48,10 +49,14 @@ SYSTEM_INSTRUCTION = (
     "quizzes, grading rubrics, and report card comments. Be practical and concise."
 )
 
-# "gemini-2.5-flash" is a floating alias Google keeps pointed at their current
-# recommended fast model — this avoids hard-coding a specific dated model name
-# that could get deprecated later (exactly what happened with Groq's playai-tts).
-MODEL_NAME = "gemini-2.5-flash"
+# "gemini-3.8-flash" is the current active model alias at the time of this update.
+# Keep this aligned with the model Google advertises as the default fast option.
+MODEL_NAME = "gemini-3.8-flash"
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=2))
+def call_gemini_with_retry(chat, user_message):
+    return chat.send_message(f"{SYSTEM_INSTRUCTION}\n\nTeacher's request: {user_message}")
 
 
 # ---------- Database (Turso) ----------
@@ -211,7 +216,7 @@ def send():
 
     try:
         chat = gemini_client.chats.create(model=MODEL_NAME)
-        response = chat.send_message(f"{SYSTEM_INSTRUCTION}\n\nTeacher's request: {user_message}")
+        response = call_gemini_with_retry(chat, user_message)
         reply = response.text
     except Exception as e:
         reply = f"Sorry, something went wrong: {e}"

@@ -18,10 +18,11 @@
             <button id="new-chat-btn" class="new-chat-btn">➕ New Chat</button>
 
             <p class="section-label">QUICK ACTIONS</p>
-            <button class="quick-action" data-prompt="Create a lesson plan. Ask me for the subject, grade level, and topic if I haven't given them yet.">📝 Lesson Plan</button>
-            <button class="quick-action" data-prompt="Create a quiz. Ask me for the subject, grade level, topic, and number of questions if I haven't given them yet.">❓ Quiz / Test</button>
-            <button class="quick-action" data-prompt="Create an assignment. Ask me for the subject and topics if I haven't given them yet.">📋 Assignment</button>
-            <button class="quick-action" data-prompt="Write a report card comment. Ask me for the student's grade/performance level and any behavior notes if I haven't given them yet.">💬 Report Comment</button>
+            <button class="quick-action" type="button" data-page="{{ url_for('lesson.lesson_page') }}" data-doc-type="lesson_plan">📝 Lesson Plan</button>
+            <button class="quick-action" type="button" data-page="{{ url_for('lesson.notes_page') }}" data-doc-type="notes">📘 Notes</button>
+            <button class="quick-action" type="button" data-page="{{ url_for('lesson.assignment_page') }}" data-doc-type="assignment">📋 Assignment</button>
+            <button class="quick-action" type="button" data-page="{{ url_for('lesson.test_page') }}" data-doc-type="test">❓ Quiz / Test</button>
+            <button class="quick-action" type="button" data-prompt="Write a report card comment. Ask me for the student's grade/performance level and any behavior notes if I haven't given them yet.">💬 Report Comment</button>
 
             <div class="sidebar-bottom">
                 <a href="{{ url_for('logout') }}" class="logout-link">🚪 Log Out</a>
@@ -29,6 +30,59 @@
         </aside>
 
         <main class="main">
+            <div id="lesson-panel" class="lesson-panel hidden" aria-live="polite">
+                <div class="lesson-panel-header">
+                    <button type="button" id="close-lesson-panel" class="panel-back-btn">← Back to chat</button>
+                </div>
+
+                <form id="lesson-form" class="lesson-card" autocomplete="off">
+                    <h2>Lesson Plan Details</h2>
+
+                    <label for="document_type">Document Type</label>
+                    <select id="document_type" name="document_type" required>
+                        <option value="lesson_plan">Lesson Plan</option>
+                        <option value="notes">Notes</option>
+                        <option value="assignment">Assignment</option>
+                        <option value="test">Test</option>
+                    </select>
+
+                    <label for="curriculum">Curriculum</label>
+                    <select id="curriculum" name="curriculum" required>
+                        {% for key, c in cfg.curricula.items() %}
+                        <option value="{{ key }}">{{ c.label }}</option>
+                        {% endfor %}
+                    </select>
+
+                    <label for="subject">Subject</label>
+                    <select id="subject" name="subject" required>
+                        <option value="" disabled selected>Choose a subject</option>
+                        {% for s in cfg.subjects %}<option>{{ s }}</option>{% endfor %}
+                    </select>
+
+                    <label for="topic">Topic / Sub-topic</label>
+                    <input id="topic" name="topic" type="text" maxlength="200" required placeholder="e.g. 2.1 Materials and Manufacturing - Heat Treatment">
+
+                    <label for="class_name" id="class-label">Class (Form)</label>
+                    <select id="class_name" name="class_name" required></select>
+
+                    <label for="duration">Duration</label>
+                    <select id="duration" name="duration">
+                        {% for d in cfg.durations %}<option value="{{ d }}" {{ 'selected' if d == 40 }}>{{ d }} Minutes</option>{% endfor %}
+                    </select>
+
+                    <button type="submit" id="generate-btn" class="lesson-btn">Generate Lesson Plan</button>
+                    <p id="form-error" class="lesson-error" hidden></p>
+                </form>
+
+                <section id="preview" class="lesson-card lesson-preview" hidden>
+                    <h2>Review and edit</h2>
+                    <p class="lesson-hint">Change anything you like, then download the Word file.</p>
+                    <div id="preview-body"></div>
+                    <button type="button" id="download-btn" class="lesson-btn primary">Download Word file</button>
+                    <p id="download-error" class="lesson-error" hidden></p>
+                </section>
+            </div>
+
             <div class="chat-window" id="chat-window">
                 {% if not messages %}
                     <div class="empty-state">
@@ -49,8 +103,10 @@
         </main>
     </div>
 
+    <script id="cfg" type="application/json">{{ cfg|tojson }}</script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.2/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
     <script src="{{ url_for('static', filename='chat.js') }}"></script>
+    <script src="{{ url_for('static', filename='lesson.js') }}"></script>
 </body>
 </html>

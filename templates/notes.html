@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notes - Teacher Assistant</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='lesson.css') }}">
+</head>
+<body>
+    <main class="page">
+        <a class="back" href="{{ url_for('chat_page') }}">&larr; Back to chat</a>
+
+        <form id="lesson-form" class="notes-card" autocomplete="off">
+            <h1>Generate Notes</h1>
+
+            <input id="document_type" name="document_type" type="hidden" value="notes">
+            <input id="curriculum" name="curriculum" type="hidden" value="cbc">
+            <input id="duration" name="duration" type="hidden" value="80">
+
+            <label for="subject">Subject</label>
+            <input id="subject" name="subject" type="text" placeholder="e.g. Chemistry" required>
+
+            <label for="topic">Topic / Sub-topic</label>
+            <input id="topic" name="topic" type="text" placeholder="e.g. Periodic Table and Electron Configuration" required>
+
+            <label for="class_name" id="class-label">Class / Grade</label>
+            <input id="class_name" name="class_name" type="text" placeholder="e.g. Form 1" required>
+
+            <label for="detail_level">Level of detail</label>
+            <select id="detail_level" name="detail_level" class="notes-select" required>
+                <option value="Brief overview">Brief overview</option>
+                <option value="Standard (exam-ready)">Standard (exam-ready)</option>
+                <option value="In-depth / detailed">In-depth / detailed</option>
+            </select>
+
+            <label for="note_format">Format</label>
+            <select id="note_format" name="note_format" class="notes-select" required>
+                <option value="Bullet points">Bullet points</option>
+                <option value="Structured with headings and sub-points">Structured with headings and sub-points</option>
+                <option value="Numbered outline">Numbered outline</option>
+            </select>
+
+            <button type="submit" id="generate-btn" class="notes-btn">Generate Notes</button>
+            <p id="form-error" class="error" hidden></p>
+        </form>
+
+        <section id="preview" class="card" hidden>
+            <h1>Review and edit</h1>
+            <p class="hint">Change anything you like, then save or download your notes.</p>
+            <div id="preview-body"></div>
+            <div class="download-panel">
+                <button type="button" id="download-btn" class="btn primary">Download Word file</button>
+                <p id="download-error" class="download-note" hidden></p>
+            </div>
+        </section>
+    </main>
+
+    <script id="cfg" type="application/json">{{ cfg|tojson }}</script>
+    <script src="{{ url_for('static', filename='lesson.js') }}"></script>
+</body>
+</html>

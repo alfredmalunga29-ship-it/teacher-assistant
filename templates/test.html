@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test - Teacher Assistant</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='lesson.css') }}">
+</head>
+<body>
+    <main class="page test-page">
+        <a class="back" href="{{ url_for('chat_page') }}">&larr; Back to chat</a>
+
+        <form id="lesson-form" class="test-card" autocomplete="off">
+            <div class="test-hero">What would you like help with today?</div>
+            <h1>Quiz / Test Details</h1>
+
+            <input id="document_type" name="document_type" type="hidden" value="test">
+
+            <label for="test_type">Type</label>
+            <select id="test_type" name="test_type" required>
+                <option value="quiz">Quiz</option>
+                <option value="test" selected>Test</option>
+            </select>
+
+            <label for="subject">Subject</label>
+            <select id="subject" name="subject" required>
+                <option value="">Select a subject</option>
+                <option value="Physics">Physics</option>
+                <option value="Chemistry">Chemistry</option>
+                <option value="Biology">Biology</option>
+                <option value="Agricultural Science">Agricultural Science</option>
+                <option value="Creative Arts">Creative Arts</option>
+                <option value="English Language">English Language</option>
+                <option value="Civic Education">Civic Education</option>
+                <option value="Home Economics">Home Economics</option>
+                <option value="Mathematics">Mathematics</option>
+                <option value="Additional Mathematics">Additional Mathematics</option>
+                <option value="Computer Studies">Computer Studies</option>
+                <option value="Computer Studies / ICT">Computer Studies / ICT</option>
+                <option value="ICT">ICT</option>
+                <option value="Design and Technology">Design and Technology</option>
+                <option value="Geography">Geography</option>
+                <option value="Business Studies">Business Studies</option>
+            </select>
+
+            <label for="topics">Topics to include (comma-separated)</label>
+            <input id="topics" name="topics" type="text" placeholder="e.g. Periodic table, Atomic structure">
+
+            <label for="question_count">Number of questions</label>
+            <div class="stepper">
+                <input id="question_count" name="question_count" type="number" value="10" min="1" max="50">
+                <div class="stepper-controls" aria-label="Adjust question count">
+                    <button type="button" class="step-btn" data-step="-1" aria-label="Decrease">−</button>
+                    <button type="button" class="step-btn" data-step="1" aria-label="Increase">＋</button>
+                </div>
+            </div>
+
+            <label for="question_type_select">Question types to include</label>
+            <div class="tag-box" id="question_types">
+                <div id="selected-tags" class="selected-tags" aria-live="polite">
+                    <span class="selected-tag" data-value="Multiple Choice">Multiple Choice <button type="button" aria-label="Remove Multiple Choice">×</button></span>
+                    <span class="selected-tag" data-value="Structured / Short Answer">Structured / Short Answer <button type="button" aria-label="Remove Structured / Short Answer">×</button></span>
+                </div>
+                <select id="question_type_select" class="tag-select" aria-label="Add question type">
+                    <option value="">Add type</option>
+                    <option value="Multiple Choice">Multiple Choice</option>
+                    <option value="Structured / Short Answer">Structured / Short Answer</option>
+                    <option value="Essay">Essay</option>
+                </select>
+            </div>
+
+            <label for="difficulty">Difficulty</label>
+            <select id="difficulty" name="difficulty" required>
+                <option value="easy" selected>Easy</option>
+                <option value="medium">Medium</option>
+                <option value="hard">Hard</option>
+            </select>
+
+            <button type="submit" id="generate-btn" class="test-btn">Generate Quiz / Test</button>
+            <p id="form-error" class="error" hidden></p>
+        </form>
+
+        <section id="preview" class="card" hidden>
+            <h1>Review and edit</h1>
+            <p class="hint">Check the questions, rubric, and marking guide before saving.</p>
+            <div id="preview-body"></div>
+            <div class="download-panel">
+                <button type="button" id="download-btn" class="btn primary">Download Word file</button>
+                <p id="download-error" class="download-note" hidden></p>
+            </div>
+        </section>
+    </main>
+
+    <script id="cfg" type="application/json">{{ cfg|tojson }}</script>
+    <script src="{{ url_for('static', filename='lesson.js') }}"></script>
+</body>
+</html>

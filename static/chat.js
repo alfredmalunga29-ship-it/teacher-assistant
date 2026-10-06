@@ -2,6 +2,8 @@ const form = document.getElementById("chat-form");
 const input = document.getElementById("message-input");
 const chatWindow = document.getElementById("chat-window");
 const newChatBtn = document.getElementById("new-chat-btn");
+const lessonPanel = document.getElementById("lesson-panel");
+const closeLessonBtn = document.getElementById("close-lesson-panel");
 const quickActionButtons = document.querySelectorAll(".quick-action");
 
 // Renders assistant text as formatted markdown (headings, bold, lists, etc.)
@@ -65,15 +67,46 @@ form.addEventListener("submit", (e) => {
 
 quickActionButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
+        const pageUrl = btn.getAttribute("data-page");
+        if (pageUrl) {
+            window.location.href = pageUrl;
+            return;
+        }
+
+        const action = btn.getAttribute("data-action");
+        if (action === "lesson-form") {
+            if (lessonPanel) {
+                lessonPanel.classList.remove("hidden");
+                lessonPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+                const typeField = document.getElementById("document_type");
+                const docType = btn.getAttribute("data-doc-type") || "lesson_plan";
+                if (typeField) {
+                    typeField.value = docType;
+                }
+                const topicField = document.getElementById("topic");
+                if (topicField) topicField.focus();
+            }
+            return;
+        }
+
         const prompt = btn.getAttribute("data-prompt");
-        sendMessage(prompt);
+        if (prompt) sendMessage(prompt);
     });
 });
 
-newChatBtn.addEventListener("click", async () => {
-    await fetch("/clear", { method: "POST" });
-    chatWindow.innerHTML = '<div class="empty-state"><p>👋 Ask me to make a lesson plan, a quiz, or a report card comment.</p></div>';
-});
+if (closeLessonBtn && lessonPanel) {
+    closeLessonBtn.addEventListener("click", () => {
+        lessonPanel.classList.add("hidden");
+    });
+}
+
+if (newChatBtn) {
+    newChatBtn.addEventListener("click", async () => {
+        if (lessonPanel) lessonPanel.classList.add("hidden");
+        await fetch("/clear", { method: "POST" });
+        chatWindow.innerHTML = '<div class="empty-state"><p>👋 Ask me to make a lesson plan, a quiz, or a report card comment.</p></div>';
+    });
+}
 
 // Re-render markdown for any messages already on the page from chat history
 // (the server sends these as plain escaped text, so they need this same pass)

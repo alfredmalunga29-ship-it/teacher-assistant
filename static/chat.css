@@ -12,7 +12,8 @@ html, body {
 .layout {
     display: flex;
     height: 100vh;
-    width: 100vw;
+    height: 100dvh;
+    width: 100%;
 }
 
 /* ---------- Sidebar ---------- */
@@ -225,6 +226,124 @@ html, body {
     color: white;
 }
 
+.lesson-panel {
+    padding: 20px 24px 0;
+    background: rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+}
+.lesson-panel.hidden {
+    display: none;
+}
+.lesson-panel-header {
+    display: flex;
+    justify-content: flex-start;
+    margin-bottom: 12px;
+}
+.panel-back-btn {
+    border: none;
+    background: rgba(255, 255, 255, 0.12);
+    color: white;
+    border-radius: 999px;
+    padding: 8px 14px;
+    cursor: pointer;
+}
+.lesson-card {
+    background: rgba(255, 255, 255, 0.96);
+    border-radius: 20px;
+    padding: 22px 24px;
+    max-width: 900px;
+    margin: 0 auto 18px;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.15);
+}
+.lesson-card h2 {
+    font-size: 28px;
+    font-weight: 700;
+    margin-bottom: 18px;
+    color: #1f2a37;
+}
+.lesson-card label {
+    display: block;
+    font-size: 15px;
+    margin: 16px 0 8px;
+    color: #23313f;
+    font-weight: 600;
+}
+.lesson-card input,
+.lesson-card select,
+.lesson-card textarea {
+    width: 100%;
+    border: 1px solid #dfe5e8;
+    border-radius: 12px;
+    background: #f4f5f6;
+    padding: 12px 14px;
+    font-size: 16px;
+    color: #1f2a37;
+    outline: none;
+}
+.lesson-card input::placeholder,
+.lesson-card textarea::placeholder {
+    color: #7d8c96;
+}
+.lesson-card input:focus,
+.lesson-card select:focus,
+.lesson-card textarea:focus {
+    border-color: #2E7D6B;
+    background: #fff;
+}
+.lesson-card textarea {
+    resize: none;
+    overflow: hidden;
+    line-height: 1.45;
+}
+.lesson-btn {
+    margin-top: 22px;
+    border: 1px solid #d0d0d5;
+    background: #fff;
+    border-radius: 12px;
+    padding: 12px 18px;
+    font-size: 16px;
+    cursor: pointer;
+    color: #23313f;
+}
+.lesson-btn:hover {
+    border-color: #2E7D6B;
+    color: #2E7D6B;
+}
+.lesson-btn:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+.lesson-btn.primary {
+    background: #2E7D6B;
+    color: #fff;
+    border-color: #2E7D6B;
+}
+.lesson-btn.primary:hover {
+    background: #24614F;
+    color: #fff;
+}
+.lesson-error {
+    color: #b3261e;
+    margin-top: 12px;
+    font-size: 15px;
+}
+.lesson-hint {
+    color: #586875;
+    margin: -8px 0 8px;
+}
+.lesson-preview .group {
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid #ebe7df;
+}
+.lesson-preview .group h2 {
+    font-size: 17px;
+    margin-bottom: 4px;
+    color: #1f2a37;
+}
+.lesson-preview label {
+    margin-top: 12px;
+}
 .input-bar {
     display: flex;
     gap: 10px;
@@ -269,4 +388,9 @@ html, body {
         height: auto;
         max-height: 40vh;
     }
+}
+
+/* Markdown output already has its own line breaks; pre-wrap doubles the spacing */
+.message.assistant .bubble {
+    white-space: normal;
 }

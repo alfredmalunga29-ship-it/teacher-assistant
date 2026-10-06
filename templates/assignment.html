@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assignment - Teacher Assistant</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='lesson.css') }}">
+</head>
+<body>
+    <main class="page">
+        <a class="back" href="{{ url_for('chat_page') }}">&larr; Back to chat</a>
+
+        <form id="lesson-form" class="notes-card" autocomplete="off">
+            <h1>Assignment Details</h1>
+
+            <input id="document_type" name="document_type" type="hidden" value="assignment">
+            <input id="curriculum" name="curriculum" type="hidden" value="cbc">
+            <input id="duration" name="duration" type="hidden" value="80">
+            <input id="class_name" name="class_name" type="hidden" value="Form 1">
+
+            <label for="subject">Subject</label>
+            <input id="subject" name="subject" type="text" placeholder="e.g. Design and Technology" required>
+
+            <label for="topics">Topics / Scenarios to cover (comma-separated)</label>
+            <input id="topics" name="topics" type="text" placeholder="e.g. Heat treatment, Holding tools, Plastics" required>
+
+            <label for="duration_to_complete">Duration to complete</label>
+            <input id="duration_to_complete" name="duration_to_complete" type="text" placeholder="e.g. 3 weeks" required>
+
+            <label for="due_date">Due date</label>
+            <input id="due_date" name="due_date" type="text" placeholder="e.g. 7th September, 2026" required>
+
+            <button type="submit" id="generate-btn" class="notes-btn">Generate Assignment</button>
+            <p id="form-error" class="error" hidden></p>
+        </form>
+
+        <section id="preview" class="card" hidden>
+            <h1>Review and edit</h1>
+            <p class="hint">Check the assignment instructions and update any details before downloading.</p>
+            <div id="preview-body"></div>
+            <div class="download-panel">
+                <button type="button" id="download-btn" class="btn primary">Download Word file</button>
+                <p id="download-error" class="download-note" hidden></p>
+            </div>
+        </section>
+    </main>
+
+    <script id="cfg" type="application/json">{{ cfg|tojson }}</script>
+    <script src="{{ url_for('static', filename='lesson.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,449 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Source Sans 3', 'Segoe UI', system-ui, sans-serif;
+}
+
+body {
+    background: #f0efe9;
+    color: #1f2428;
+}
+
+.page {
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 20px 16px 40px;
+}
+
+.test-page {
+    max-width: 760px;
+    margin: 0 auto;
+}
+
+.test-card {
+    border: 1px solid #d8d1c7;
+    border-radius: 14px;
+    padding: 18px 18px 16px;
+    background: rgba(255, 255, 255, 0.42);
+    box-shadow: 0 5px 12px rgba(17, 24, 39, 0.03);
+}
+
+.test-hero {
+    margin: 0 0 10px;
+    color: #2d2d2d;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.4;
+}
+
+.test-card h1 {
+    font-size: 28px;
+    font-weight: 800;
+    margin: 0 0 14px;
+    line-height: 1.2;
+    color: #1f232a;
+}
+
+.test-card label {
+    margin-top: 14px;
+    margin-bottom: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    color: #1f232a;
+}
+
+.test-card input,
+.test-card select,
+.test-card textarea {
+    background: #e9e3d8;
+    border: 1px solid #d4cec3;
+    border-radius: 10px;
+    padding: 11px 12px;
+    font-size: 15px;
+    color: #2a2f35;
+}
+
+.test-card input::placeholder,
+.test-card textarea::placeholder {
+    color: #75808a;
+}
+
+.test-card select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23211f1c' stroke-width='2.4'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 16px center;
+    padding-right: 40px;
+}
+
+.stepper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #e9e3d8;
+    border: 1px solid #d4cec3;
+    border-radius: 10px;
+    padding: 0 10px 0 8px;
+}
+
+.stepper input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    padding-right: 0;
+}
+
+.stepper input[type="number"]::-webkit-outer-spin-button,
+.stepper input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.stepper input[type="number"] {
+    appearance: textfield;
+    -moz-appearance: textfield;
+}
+
+.stepper-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-left: 8px;
+}
+
+.step-btn {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(25, 25, 25, 0.08);
+    color: #1d2328;
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.tag-box {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    background: #e9e3d8;
+    border: 1px solid #d4cec3;
+    border-radius: 10px;
+    padding: 9px 10px;
+    min-height: 48px;
+}
+
+.selected-tags {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+}
+
+.selected-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #1c7d72;
+    color: white;
+    border-radius: 7px;
+    padding: 6px 9px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.selected-tag button {
+    border: none;
+    background: rgba(255,255,255,0.18);
+    color: #fff;
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0;
+}
+
+.tag-select {
+    margin-left: auto;
+    max-width: 190px;
+    min-width: 120px;
+    background-color: transparent;
+    border: 1px solid #cfc5ba;
+    border-radius: 8px;
+    padding: 8px 10px;
+    color: #2a2f35;
+}
+
+.test-btn {
+    width: 100%;
+    margin-top: 20px;
+    padding: 11px 16px;
+    border-radius: 12px;
+    border: 1px solid #cfc7bf;
+    background: #fff;
+    color: #1f232a;
+    font-size: 17px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.test-btn:hover {
+    border-color: #1c7d72;
+    color: #1c7d72;
+}
+
+@media (max-width: 560px) {
+    .test-card {
+        padding: 16px 14px 18px;
+    }
+
+    .test-card h1 {
+        font-size: 26px;
+    }
+}
+
+.back {
+    display: inline-block;
+    margin-bottom: 18px;
+    color: #2a7a78;
+    text-decoration: none;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.back:hover {
+    text-decoration: underline;
+}
+
+.card {
+    border: 1px solid #d7d0c8;
+    border-radius: 18px;
+    padding: 22px 22px 18px;
+    margin-bottom: 22px;
+    background: rgba(255, 255, 255, 0.5);
+    box-shadow: 0 8px 18px rgba(17, 24, 39, 0.03);
+}
+
+.notes-card {
+    max-width: 760px;
+    margin: 0 auto 22px;
+    border: 1px solid #d7d0c8;
+    border-radius: 18px;
+    padding: 24px 28px 20px;
+    background: rgba(255, 255, 255, 0.42);
+    box-shadow: 0 8px 18px rgba(17, 24, 39, 0.03);
+}
+
+.notes-card h1 {
+    font-size: clamp(2.1rem, 4vw, 3rem);
+    font-weight: 800;
+    margin: 0 0 20px;
+    line-height: 1.15;
+    color: #1b1d22;
+}
+
+.notes-card label {
+    display: block;
+    font-size: 16px;
+    margin: 18px 0 8px;
+    font-weight: 600;
+    color: #1f2428;
+}
+
+.notes-card input,
+.notes-card select {
+    width: 100%;
+    border: 1px solid #d6d0c8;
+    border-radius: 12px;
+    background: #efeae2;
+    padding: 14px 16px;
+    font-size: 17px;
+    color: #1f2428;
+}
+
+.notes-card input::placeholder {
+    color: #7a7671;
+}
+
+.notes-card .notes-select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23211f1c' stroke-width='2.4'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 16px center;
+    padding-right: 42px;
+}
+
+.notes-btn {
+    margin-top: 22px;
+    border: 1px solid #d7d2cc;
+    border-radius: 12px;
+    background: #f4f1eb;
+    color: #1b1d22;
+    padding: 12px 26px;
+    font-size: 18px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.notes-btn:hover {
+    border-color: #2a7a78;
+    color: #2a7a78;
+}
+
+h1 {
+    font-size: 30px;
+    font-weight: 800;
+    margin-bottom: 20px;
+    line-height: 1.2;
+    color: #1b1d22;
+}
+
+label {
+    display: block;
+    font-size: 16px;
+    margin: 18px 0 8px;
+    font-weight: 600;
+    color: #1f2428;
+}
+
+input, select, textarea {
+    width: 100%;
+    border: 1px solid transparent;
+    border-radius: 12px;
+    background: #efeae2;
+    padding: 13px 14px;
+    font-size: 17px;
+    color: #1f2428;
+    outline: none;
+    transition: all 0.2s ease;
+}
+
+input::placeholder, textarea::placeholder {
+    color: #7e7a74;
+}
+
+input:focus, select:focus, textarea:focus {
+    border-color: #2d7c8a;
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(45, 124, 138, 0.08);
+}
+
+select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23211f1c' stroke-width='2.4'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 16px center;
+    padding-right: 42px;
+}
+
+textarea {
+    resize: none;
+    overflow: hidden;
+    line-height: 1.45;
+    min-height: 90px;
+}
+
+.btn {
+    margin-top: 24px;
+    border: 1px solid #cfc7bf;
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 12px 20px;
+    font-size: 17px;
+    font-weight: 700;
+    color: #1d1d1d;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn:hover {
+    border-color: #2a7a78;
+    color: #2a7a78;
+}
+
+.btn:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+
+.btn.primary {
+    background: #1e8a7a;
+    color: #fff;
+    border-color: #1e8a7a;
+}
+
+.btn.primary:hover {
+    background: #177169;
+    color: #fff;
+}
+
+.error {
+    color: #b3261e;
+    margin-top: 12px;
+    font-size: 15px;
+}
+
+.download-panel {
+    margin-top: 18px;
+    padding: 20px 18px 18px;
+    background: rgba(229, 231, 227, 0.9);
+    border: 1px solid #d9d2c8;
+    border-radius: 18px;
+    box-shadow: 0 4px 12px rgba(17, 24, 39, 0.03);
+}
+
+.download-panel .btn.primary {
+    display: inline-block;
+    margin-top: 0;
+    min-width: 210px;
+    border-radius: 14px;
+    font-weight: 700;
+}
+
+.download-note {
+    margin-top: 16px;
+    margin-bottom: 0;
+    color: #4a4f52;
+    font-size: 17px;
+    line-height: 1.5;
+}
+
+.hint {
+    color: #5f696f;
+    margin: -10px 0 10px;
+    font-size: 15px;
+}
+
+.group {
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid #e8e1d9;
+}
+
+.group h2 {
+    font-size: 18px;
+    margin-bottom: 10px;
+    color: #1f2428;
+}
+
+@media (max-width: 560px) {
+    .card {
+        padding: 18px 16px 16px;
+    }
+
+    h1 {
+        font-size: 26px;
+    }
+
+    .btn {
+        width: 100%;
+    }
+}
+

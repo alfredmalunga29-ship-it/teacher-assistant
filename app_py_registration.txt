@@ -1,0 +1,19 @@
+ADD THIS TO app.py
+=================
+
+Find the section where `app = Flask(__name__)` and your `ask_ai` function are
+defined. After both exist, add:
+
+    from lesson_plan_routes import init_lesson_builder
+    init_lesson_builder(app, ask_ai)
+
+Do not register the same blueprint twice.
+
+This package adds a new blueprint named `lesson_builder`, with:
+  GET  /lesson-plan
+  POST /lesson-plan/generate
+  POST /lesson-plan/download
+
+If your existing app already has a different route at `/lesson-plan`, remove
+or disable that old route before registering this one to avoid a URL conflict.
+Do not replace app.py wholesale; preserve your login, chat and other routes.

@@ -1,0 +1,6 @@
+<!-- Replace the existing Lesson Plan / Notes / Assignment / Quiz buttons with these links.
+     Keep this block inside the existing sidebar in templates/chat.html. -->
+<a class="quick-action" href="{{ url_for('lesson.lesson_page') }}">📘 &nbsp; Lesson Plan</a>
+<a class="quick-action" href="{{ url_for('lesson.notes_page') }}">📚 &nbsp; Teaching Notes</a>
+<a class="quick-action" href="{{ url_for('lesson.assignment_page') }}">📋 &nbsp; Assignment</a>
+<a class="quick-action" href="{{ url_for('lesson.test_page') }}">☑ &nbsp; Quiz / Test</a>

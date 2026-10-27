@@ -1,87 +1,14 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lesson Plan - Teacher Assistant</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='lesson.css') }}">
-</head>
-<body>
-    <main class="page">
-        <a class="back" href="{{ url_for('chat_page') }}">&larr; Back to chat</a>
-
-        <form id="lesson-form" class="card" autocomplete="off">
-            <h1>Lesson Plan Details</h1>
-
-            <input id="document_type" name="document_type" type="hidden" value="lesson_plan">
-
-            <label for="curriculum">Curriculum</label>
-            <select id="curriculum" name="curriculum" required>
-                <option value="cbc">CBC (Forms)</option>
-                <option value="old">Old curriculum (Grades)</option>
-            </select>
-
-            <label for="subject">Subject</label>
-            <select id="subject" name="subject" required>
-                <option value="Physics">Physics</option>
-                <option value="Chemistry">Chemistry</option>
-                <option value="Biology">Biology</option>
-                <option value="Agricultural Science">Agricultural Science</option>
-                <option value="Creative Arts">Creative Arts</option>
-                <option value="English Language">English Language</option>
-                <option value="Civic Education">Civic Education</option>
-                <option value="Home Economics">Home Economics</option>
-                <option value="Mathematics">Mathematics</option>
-                <option value="Additional Mathematics">Additional Mathematics</option>
-                <option value="Computer Studies">Computer Studies</option>
-                <option value="Computer Studies / ICT">Computer Studies / ICT</option>
-                <option value="ICT">ICT</option>
-                <option value="Design and Technology">Design and Technology</option>
-                <option value="Geography">Geography</option>
-                <option value="Business Studies">Business Studies</option>
-                <option value="ICT" selected>ICT</option>
-            </select>
-
-            <label for="class_name" id="class-label">Class</label>
-            <select id="class_name" name="class_name" required>
-                <option value="Form 1">Form 1</option>
-                <option value="Form 2">Form 2</option>
-                <option value="Form 3">Form 3</option>
-                <option value="Form 4">Form 4</option>
-            </select>
-
-            <label for="duration">Duration</label>
-            <select id="duration" name="duration" required>
-                <option value="40">40 Minutes</option>
-                <option value="60">60 Minutes</option>
-                <option value="80" selected>80 Minutes</option>
-                <option value="120">120 Minutes</option>
-            </select>
-
-            <label for="topic">Topic</label>
-            <input id="topic" name="topic" type="text" placeholder="Pick a topic or type one" required>
-
-            <label for="subtopic">Sub-topic</label>
-            <input id="subtopic" name="subtopic" type="text" placeholder="Optional">
-
-            <button type="submit" id="generate-btn" class="btn">Generate</button>
-            <p id="form-error" class="error" hidden></p>
-        </form>
-
-        <section id="preview" class="card" hidden>
-            <h1>Review and edit</h1>
-            <p class="hint">Change anything you like, then download the Word file.</p>
-            <div id="preview-body"></div>
-            <div class="download-panel">
-                <button type="button" id="download-btn" class="btn primary">Download Word file</button>
-                <p id="download-error" class="download-note" hidden></p>
-            </div>
-        </section>
-    </main>
-
-    <script id="cfg" type="application/json">{{ cfg|tojson }}</script>
-    <script src="{{ url_for('static', filename='lesson.js') }}"></script>
-</body>
-</html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Lesson Plan - Teacher Assistant</title><link rel="stylesheet" href="{{ url_for('static', filename='lesson.css') }}"></head>
+<body><main class="page"><a class="back" href="{{ url_for('chat_page') }}">← Back to chat</a>
+<form id="lesson-form" class="notes-card" autocomplete="off"><p class="eyebrow">TEACHING TOOLS</p><h1>Lesson Plan Details</h1><p class="hint">Choose the curriculum and class, enter your topic, then generate a plan to review and download.</p>
+<input id="document_type" name="document_type" type="hidden" value="lesson_plan">
+<label for="curriculum">Curriculum</label><select id="curriculum" name="curriculum" required>{% for key, c in cfg.curricula.items() %}<option value="{{ key }}">{{ c.label }}</option>{% endfor %}</select>
+<label for="subject">Subject</label><select id="subject" name="subject" required><option value="" disabled selected>Choose a subject</option>{% for s in cfg.subjects %}<option value="{{ s }}">{{ s }}</option>{% endfor %}</select>
+<label for="topic">Topic / Sub-topic</label><input id="topic" name="topic" type="text" placeholder="e.g. Materials and manufacturing" required>
+<label for="class_name" id="class-label">Class / Grade</label><select id="class_name" name="class_name" required><option value="">Choose curriculum first</option></select>
+<label for="duration">Lesson duration</label><select id="duration" name="duration" required>{% for d in cfg.durations %}<option value="{{ d }}">{{ d }} minutes</option>{% endfor %}</select>
+<label for="objectives">Learning objectives (optional)</label><textarea id="objectives" name="objectives" rows="3" placeholder="What should learners know or be able to do?"></textarea>
+<button type="submit" id="generate-btn" class="notes-btn">Generate Lesson Plan</button><p id="form-error" class="error" role="alert" hidden></p></form>
+<section id="preview" class="card" hidden><h2>Review and edit</h2><p class="hint">Review the plan before downloading your Word document.</p><div id="preview-body"></div><div class="download-panel"><button type="button" id="download-btn" class="notes-btn">Download Word file</button><p id="download-error" class="error" role="alert" hidden></p></div></section></main>
+<script id="cfg" type="application/json">{{ cfg|tojson }}</script><script src="{{ url_for('static', filename='lesson.js') }}"></script></body></html>

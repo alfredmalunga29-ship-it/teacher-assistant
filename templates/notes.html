@@ -16,17 +16,28 @@
             <h1>Generate Notes</h1>
 
             <input id="document_type" name="document_type" type="hidden" value="notes">
-            <input id="curriculum" name="curriculum" type="hidden" value="cbc">
             <input id="duration" name="duration" type="hidden" value="80">
 
+            <label for="curriculum">Curriculum</label>
+            <select id="curriculum" name="curriculum" required>
+                {% for key, c in cfg.curricula.items() %}
+                <option value="{{ key }}">{{ c.label }}</option>
+                {% endfor %}
+            </select>
+
             <label for="subject">Subject</label>
-            <input id="subject" name="subject" type="text" placeholder="e.g. Chemistry" required>
+            <select id="subject" name="subject" required>
+                <option value="" disabled selected>Choose a subject</option>
+                {% for subject in cfg.subjects %}
+                <option value="{{ subject }}">{{ subject }}</option>
+                {% endfor %}
+            </select>
 
             <label for="topic">Topic / Sub-topic</label>
             <input id="topic" name="topic" type="text" placeholder="e.g. Periodic Table and Electron Configuration" required>
 
             <label for="class_name" id="class-label">Class / Grade</label>
-            <input id="class_name" name="class_name" type="text" placeholder="e.g. Form 1" required>
+            <select id="class_name" name="class_name" required></select>
 
             <label for="detail_level">Level of detail</label>
             <select id="detail_level" name="detail_level" class="notes-select" required>

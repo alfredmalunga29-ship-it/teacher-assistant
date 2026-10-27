@@ -16,21 +16,50 @@
             <h1>Assignment Details</h1>
 
             <input id="document_type" name="document_type" type="hidden" value="assignment">
-            <input id="curriculum" name="curriculum" type="hidden" value="cbc">
             <input id="duration" name="duration" type="hidden" value="80">
-            <input id="class_name" name="class_name" type="hidden" value="Form 1">
+
+            <label for="curriculum">Curriculum</label>
+            <select id="curriculum" name="curriculum" required>
+                {% for key, c in cfg.curricula.items() %}
+                <option value="{{ key }}">{{ c.label }}</option>
+                {% endfor %}
+            </select>
 
             <label for="subject">Subject</label>
-            <input id="subject" name="subject" type="text" placeholder="e.g. Design and Technology" required>
+            <select id="subject" name="subject" required>
+                <option value="" disabled selected>Choose a subject</option>
+                {% for subject in cfg.subjects %}
+                <option value="{{ subject }}">{{ subject }}</option>
+                {% endfor %}
+            </select>
+
+            <label for="class_name" id="class-label">Class / Grade</label>
+            <select id="class_name" name="class_name" required></select>
 
             <label for="topics">Topics / Scenarios to cover (comma-separated)</label>
             <input id="topics" name="topics" type="text" placeholder="e.g. Heat treatment, Holding tools, Plastics" required>
 
             <label for="duration_to_complete">Duration to complete</label>
-            <input id="duration_to_complete" name="duration_to_complete" type="text" placeholder="e.g. 3 weeks" required>
+            <select id="duration_to_complete" name="duration_to_complete" required>
+                <option value="" disabled selected>Choose duration</option>
+                <option value="1 week">1 week</option>
+                <option value="2 weeks">2 weeks</option>
+                <option value="3 weeks">3 weeks</option>
+                <option value="4 weeks">4 weeks</option>
+                <option value="1 month">1 month</option>
+                <option value="2 months">2 months</option>
+            </select>
 
             <label for="due_date">Due date</label>
-            <input id="due_date" name="due_date" type="text" placeholder="e.g. 7th September, 2026" required>
+            <select id="due_date" name="due_date" required>
+                <option value="" disabled selected>Choose due date</option>
+                <option value="7th September, 2026">7th September, 2026</option>
+                <option value="14th September, 2026">14th September, 2026</option>
+                <option value="21st September, 2026">21st September, 2026</option>
+                <option value="28th September, 2026">28th September, 2026</option>
+                <option value="5th October, 2026">5th October, 2026</option>
+                <option value="12th October, 2026">12th October, 2026</option>
+            </select>
 
             <button type="submit" id="generate-btn" class="notes-btn">Generate Assignment</button>
             <p id="form-error" class="error" hidden></p>

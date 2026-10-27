@@ -7,7 +7,6 @@ where ask_ai(prompt: str) -> str calls your existing AI model and returns its te
 """
 import json
 import os
-import re
 import traceback
 
 from flask import Blueprint, jsonify, redirect, render_template, request, send_file, session
@@ -21,18 +20,26 @@ _ask_ai = None
 MAX_FIELD = 4000
 
 
-def _reference_files():
-    base = os.path.dirname(os.path.abspath(__file__))
-    refs = {}
-    for folder_name in ["School Material", "Tests"]:
-        folder = os.path.join(base, folder_name)
-        if os.path.isdir(folder):
-            refs[folder_name] = sorted(os.listdir(folder))[:20]
-    return refs
+# Cache the list of reference files so every AI request does not re-list the
+# School Material / Tests folders and rebuild the hint string from scratch.
+_reference_cache = None
+
+
+def _get_reference_files():
+    global _reference_cache
+    if _reference_cache is None:
+        base = os.path.dirname(os.path.abspath(__file__))
+        refs = {}
+        for folder_name in ["School Material", "Tests"]:
+            folder = os.path.join(base, folder_name)
+            if os.path.isdir(folder):
+                refs[folder_name] = sorted(os.listdir(folder))[:20]
+        _reference_cache = refs
+    return _reference_cache
 
 
 def _reference_hint(subject, topic, document_type):
-    refs = _reference_files()
+    refs = _get_reference_files()
     names = []
     for folder_name, files in refs.items():
         names.extend(f"{folder_name}: {name}" for name in files)
@@ -213,7 +220,12 @@ def _build_prompt(layout, subject, topic, class_name, duration, document_type="l
 
 
 def _extract_json(text):
-    text = re.sub(r"^```(?:json)?|```$", "", (text or "").strip(), flags=re.M).strip()
+    text = text.strip()
+    if text.startswith("```"):
+        text = text[3:]
+    if text.endswith("```"):
+        text = text[:-3]
+    text = text.strip()
     start, end = text.find("{"), text.rfind("}")
     if start == -1 or end == -1:
         raise ValueError("The AI did not return a lesson plan. Please try again.")
@@ -228,10 +240,6 @@ def _render_document_page(template_name, title, document_type):
         template_name,
         cfg=cfg,
         full_name=session.get("full_name", ""),
-        curricula=CURRICULA,
-        subjects=SUBJECTS,
-        durations=DURATIONS,
-        topics=TOPICS,
         title=title,
         document_type=document_type,
     )
@@ -368,12 +376,89 @@ def lesson_download():
     if not _logged_in():
         return jsonify(error="Please log in again."), 401
     d = request.get_json(silent=True) or {}
-    layout = d.get("layout")
-    if layout not in CURRICULA:
-        return jsonify(error="Unknown layout."), 400
-    plan = _normalise(layout, d.get("meta"), d.get("content"))
-    if plan["meta"]["subject"] not in SUBJECTS:
-        return jsonify(error="Unknown subject."), 400
+    document_type = (d.get("document_type") or "lesson_plan").strip().lower()
+
+    if document_type == "lesson_plan":
+        layout = d.get("layout")
+        if layout not in CURRICULA:
+            return jsonify(error="Unknown layout."), 400
+        plan = _normalise(layout, d.get("meta"), d.get("content"))
+        if plan["meta"]["subject"] not in SUBJECTS:
+            return jsonify(error="Unknown subject."), 400
+        buf = build_docx(plan)
+        return send_file(buf, as_attachment=True, download_name=safe_filename(plan),
+                         mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+
+    # Other document types (notes, assignment, test)
+    # Expect plan as { document_type, meta, content }
+    plan = {"document_type": document_type, "meta": d.get("meta") or {}, "content": d.get("content") or {}}
+    # Minimal validation
+    if not plan["meta"].get("subject") and document_type != "notes":
+        return jsonify(error="Please provide subject in metadata."), 400
     buf = build_docx(plan)
     return send_file(buf, as_attachment=True, download_name=safe_filename(plan),
                      mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+
+
+# ---- Import / reference routes (shared with the chat UI) ---------------------
+
+@lesson_bp.route("/import", methods=["POST"])
+def import_image():
+    """Accept an uploaded image, or return a URL for an already-imported document."""
+    d = request.get_json(silent=True) or {}
+
+    # Lazy imports to avoid circular dependency with app.py
+    from app import get_db_client, allowed_file, allowed_content_type
+
+    # Case 1: teacher uploads a new image directly
+    if "file" in request.files:
+        f = request.files["file"]
+        if not f or not f.filename:
+            return jsonify(error="No file selected."), 400
+        if not allowed_file(f.filename):
+            return jsonify(error="File type not allowed."), 400
+        if not allowed_content_type(f.mimetype):
+            return jsonify(error="File content type not allowed."), 400
+        title = request.form.get("title", "Imported image")
+        db = get_db_client()
+        db.execute(
+            "INSERT INTO documents (user_id, title, file_type, mime_type, extension, file_path, file_size) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [session.get("user_id"), title, "image", f.mimetype,
+             f.filename.rsplit(".", 1)[1].lower() if "." in f.filename else "",
+             f.filename, os.path.getsize(f.read())],
+        )
+        db.commit()
+        doc_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+        url = url_for("import_download", doc_id=doc_id, _external=True)
+        return jsonify({"id": doc_id, "url": url, "title": title, "file_type": "image"})
+
+    # Case 2: reference an already-imported document by ID
+    doc_id = d.get("document_id")
+    if doc_id is not None:
+        db = get_db_client()
+        row = db.execute(
+            "SELECT file_path, mime_type, title FROM documents WHERE id = ? AND user_id = ?",
+            [doc_id, session.get("user_id")],
+        ).fetchone()
+        if not row:
+            return jsonify(error="Document not found."), 404
+        file_path, mime_type, title = row
+        return jsonify({"id": doc_id, "url": url_for("import_download", doc_id=doc_id, _external=True),
+                        "title": title, "file_type": _mime_to_type(mime_type)})
+
+    return jsonify(error="Provide either a file or a document_id."), 400
+
+
+def _mime_to_type(mime_type):
+    """Map a MIME type to a short human-readable label."""
+    if mime_type.startswith("image/"):
+        return "image"
+    if "pdf" in mime_type:
+        return "pdf"
+    if "word" in mime_type or "msword" in mime_type:
+        return "word"
+    if "spreadsheet" in mime_type or "excel" in mime_type:
+        return "spreadsheet"
+    if "presentation" in mime_type or "slide" in mime_type:
+        return "presentation"
+    return "document"

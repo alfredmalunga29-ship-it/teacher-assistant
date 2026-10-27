@@ -26,23 +26,18 @@
 
             <label for="subject">Subject</label>
             <select id="subject" name="subject" required>
-                <option value="">Select a subject</option>
-                <option value="Physics">Physics</option>
-                <option value="Chemistry">Chemistry</option>
-                <option value="Biology">Biology</option>
-                <option value="Agricultural Science">Agricultural Science</option>
-                <option value="Creative Arts">Creative Arts</option>
-                <option value="English Language">English Language</option>
-                <option value="Civic Education">Civic Education</option>
-                <option value="Home Economics">Home Economics</option>
-                <option value="Mathematics">Mathematics</option>
-                <option value="Additional Mathematics">Additional Mathematics</option>
-                <option value="Computer Studies">Computer Studies</option>
-                <option value="Computer Studies / ICT">Computer Studies / ICT</option>
-                <option value="ICT">ICT</option>
-                <option value="Design and Technology">Design and Technology</option>
-                <option value="Geography">Geography</option>
-                <option value="Business Studies">Business Studies</option>
+                <option value="" disabled selected>Choose a subject</option>
+                {% for subject in cfg.subjects %}
+                <option value="{{ subject }}">{{ subject }}</option>
+                {% endfor %}
+            </select>
+
+            <label for="class_name" id="class-label">Class / Grade</label>
+            <select id="class_name" name="class_name" required>
+                <option value="" disabled selected>Choose a class</option>
+                {% for class_name in cfg.curricula['cbc'].classes %}
+                <option value="{{ class_name }}">{{ class_name }}</option>
+                {% endfor %}
             </select>
 
             <label for="topics">Topics to include (comma-separated)</label>

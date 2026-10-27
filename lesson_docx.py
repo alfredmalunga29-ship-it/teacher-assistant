@@ -68,17 +68,22 @@ def schema():
 def stage_times(duration):
     """Split the lesson like the template's 80 min (10 / 50 / 15 / 5)."""
     d = int(duration)
-    intro = int(d * 10 / 80 + 0.5)
-    exercise = int(d * 15 / 80 + 0.5)
-    conclusion = int(d * 5 / 80 + 0.5)
+    intro = (d + 4) // 8          # 10% of d, rounded to nearest minute
+    exercise = (3 * d + 8) // 16  # 15% of d, rounded to nearest minute
+    conclusion = (d + 8) // 16    # 5% of d, rounded to nearest minute
     return {"introduction": intro, "exercise": exercise, "conclusion": conclusion,
             "development": d - intro - exercise - conclusion}
 
 
 def safe_filename(plan):
-    base = f"{plan['meta'].get('subject', 'Lesson')}_{plan['meta'].get('topic', 'Plan')}"
-    base = re.sub(r"[^A-Za-z0-9]+", "_", base).strip("_")[:60] or "Lesson_Plan"
-    return f"Lesson_Plan_{base}.docx"
+    # Support both lesson plan shape (layout/meta) and generic document shape (document_type/meta)
+    doc_type = plan.get("document_type") or ("lesson_plan" if plan.get("layout") else "document")
+    meta = plan.get("meta", {})
+    subj = meta.get("subject") or meta.get("title") or meta.get("topic") or "Document"
+    topic = meta.get("topic") or meta.get("title") or "Item"
+    base = f"{doc_type}_{subj}_{topic}"
+    base = re.sub(r"[^A-Za-z0-9]+", "_", base).strip("_")[:60] or "Document"
+    return f"{doc_type.capitalize()}_{base}.docx"
 
 
 # ---- Small docx helpers ------------------------------------------------------------
@@ -329,7 +334,61 @@ def build_old(plan):
     return doc
 
 
+def build_misc_docx(plan):
+    """Create a simple .docx for notes, assignment, or test document types."""
+    meta = plan.get("meta", {})
+    content = plan.get("content", {})
+    doc = _base(8.5, 11, (0.7, 0.5, 0.4, 0.5))
+
+    title = content.get("title") or meta.get("title") or meta.get("topic") or "Document"
+    p = _para(doc, 6, WD_ALIGN_PARAGRAPH.CENTER)
+    _rich(p, title, bold=True, size=16)
+
+    # Add metadata table
+    rows = []
+    if meta.get("subject"):
+        rows.append(("Subject", meta.get("subject")))
+    if meta.get("class_name"):
+        rows.append(("Class", meta.get("class_name")))
+    if meta.get("duration"):
+        rows.append(("Duration", meta.get("duration")))
+    if rows:
+        _two_col_table(doc, rows, widths=(2.0, 5.5))
+
+    # Add common fields
+    def add_section(heading, value):
+        if not value:
+            return
+        _para(doc, 6)
+        _rich(_para(doc, 0), heading + ":", bold=True)
+        if "\n" in value:
+            _bullets(doc, value)
+        else:
+            _para(doc, 2).add_run(value)
+
+    # For notes
+    add_section("Summary", content.get("summary") or content.get("main_points"))
+    add_section("Main points", content.get("main_points"))
+    add_section("Key terms", content.get("key_terms"))
+    add_section("Teacher notes", content.get("teacher_notes"))
+
+    # For assignments / tests
+    add_section("Instructions", content.get("instructions"))
+    add_section("Questions", content.get("questions"))
+    add_section("Rubric", content.get("rubric"))
+    add_section("Marking guide", content.get("marking_guide") or content.get("marking_guide"))
+
+    buf = BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+    return buf
+
+
 def build_docx(plan):
+    # If this looks like a non-lesson document, use the generic builder
+    if plan.get("document_type") and plan.get("document_type") != "lesson_plan":
+        return build_misc_docx(plan)
+    # Otherwise assume lesson plan shape
     doc = build_cbc(plan) if plan["layout"] == "cbc" else build_old(plan)
     buf = BytesIO()
     doc.save(buf)

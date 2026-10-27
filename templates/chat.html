@@ -1,112 +1,114 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Teacher Assistant</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='chat.css') }}">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#172dbb">
+  <title>Teacher Assistant Workspace</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='chat.css') }}">
 </head>
 <body>
-    <div class="layout">
-        <aside class="sidebar">
-            <div class="sidebar-top">
-                <span class="logo">🧑‍🏫</span>
-                <h1>Teacher Assistant</h1>
-            </div>
-            <p class="user-caption">👤 Logged in as <strong>{{ full_name }}</strong></p>
-
-            <button id="new-chat-btn" class="new-chat-btn">➕ New Chat</button>
-
-            <p class="section-label">QUICK ACTIONS</p>
-            <button class="quick-action" type="button" data-page="{{ url_for('lesson.lesson_page') }}" data-doc-type="lesson_plan">📝 Lesson Plan</button>
-            <button class="quick-action" type="button" data-page="{{ url_for('lesson.notes_page') }}" data-doc-type="notes">📘 Notes</button>
-            <button class="quick-action" type="button" data-page="{{ url_for('lesson.assignment_page') }}" data-doc-type="assignment">📋 Assignment</button>
-            <button class="quick-action" type="button" data-page="{{ url_for('lesson.test_page') }}" data-doc-type="test">❓ Quiz / Test</button>
-            <button class="quick-action" type="button" data-prompt="Write a report card comment. Ask me for the student's grade/performance level and any behavior notes if I haven't given them yet.">💬 Report Comment</button>
-
-            <div class="sidebar-bottom">
-                <a href="{{ url_for('logout') }}" class="logout-link">🚪 Log Out</a>
-            </div>
-        </aside>
-
-        <main class="main">
-            <div id="lesson-panel" class="lesson-panel hidden" aria-live="polite">
-                <div class="lesson-panel-header">
-                    <button type="button" id="close-lesson-panel" class="panel-back-btn">← Back to chat</button>
-                </div>
-
-                <form id="lesson-form" class="lesson-card" autocomplete="off">
-                    <h2>Lesson Plan Details</h2>
-
-                    <label for="document_type">Document Type</label>
-                    <select id="document_type" name="document_type" required>
-                        <option value="lesson_plan">Lesson Plan</option>
-                        <option value="notes">Notes</option>
-                        <option value="assignment">Assignment</option>
-                        <option value="test">Test</option>
-                    </select>
-
-                    <label for="curriculum">Curriculum</label>
-                    <select id="curriculum" name="curriculum" required>
-                        {% for key, c in cfg.curricula.items() %}
-                        <option value="{{ key }}">{{ c.label }}</option>
-                        {% endfor %}
-                    </select>
-
-                    <label for="subject">Subject</label>
-                    <select id="subject" name="subject" required>
-                        <option value="" disabled selected>Choose a subject</option>
-                        {% for s in cfg.subjects %}<option>{{ s }}</option>{% endfor %}
-                    </select>
-
-                    <label for="topic">Topic / Sub-topic</label>
-                    <input id="topic" name="topic" type="text" maxlength="200" required placeholder="e.g. 2.1 Materials and Manufacturing - Heat Treatment">
-
-                    <label for="class_name" id="class-label">Class (Form)</label>
-                    <select id="class_name" name="class_name" required></select>
-
-                    <label for="duration">Duration</label>
-                    <select id="duration" name="duration">
-                        {% for d in cfg.durations %}<option value="{{ d }}" {{ 'selected' if d == 40 }}>{{ d }} Minutes</option>{% endfor %}
-                    </select>
-
-                    <button type="submit" id="generate-btn" class="lesson-btn">Generate Lesson Plan</button>
-                    <p id="form-error" class="lesson-error" hidden></p>
-                </form>
-
-                <section id="preview" class="lesson-card lesson-preview" hidden>
-                    <h2>Review and edit</h2>
-                    <p class="lesson-hint">Change anything you like, then download the Word file.</p>
-                    <div id="preview-body"></div>
-                    <button type="button" id="download-btn" class="lesson-btn primary">Download Word file</button>
-                    <p id="download-error" class="lesson-error" hidden></p>
-                </section>
-            </div>
-
-            <div class="chat-window" id="chat-window">
-                {% if not messages %}
-                    <div class="empty-state">
-                        <p>👋 Ask me to make a lesson plan, a quiz, or a report card comment.</p>
-                    </div>
-                {% endif %}
-                {% for msg in messages %}
-                    <div class="message {{ msg.role }}">
-                        <div class="bubble">{{ msg.content }}</div>
-                    </div>
-                {% endfor %}
-            </div>
-
-            <form id="chat-form" class="input-bar">
-                <input type="text" id="message-input" placeholder="Type your request..." autocomplete="off">
-                <button type="submit">➤</button>
-            </form>
-        </main>
+<div class="layout" id="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-top">
+      <a class="brand-link" href="{{ url_for('chat_page') }}">
+        <img src="{{ url_for('static', filename='teacher-logo.png') }}" alt="Teacher Assistant" class="teacher-logo">
+        <span class="brand-block"><strong>Teacher Assistant</strong><small>AI Teaching Workspace</small></span>
+      </a>
+      <button id="sidebar-toggle" class="icon-button" type="button" aria-label="Toggle sidebar">☰</button>
     </div>
 
-    <script id="cfg" type="application/json">{{ cfg|tojson }}</script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.2/marked.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
-    <script src="{{ url_for('static', filename='chat.js') }}"></script>
-    <script src="{{ url_for('static', filename='lesson.js') }}"></script>
+    <button id="new-chat-btn" class="new-chat-btn" type="button"><span class="new-chat-symbol">＋</span><span class="nav-label">New chat</span></button>
+
+    <div class="sidebar-scroll">
+      <span class="section-label">Workspace</span>
+      <button class="quick-action active" type="button" data-prompt="Help me plan my teaching work for today."><span class="nav-icon">✦</span><span class="nav-label">AI Chat</span></button>
+
+      <span class="section-label">Teaching tools</span>
+      <a class="quick-action" href="{{ url_for('lesson.lesson_page') }}"><span class="nav-icon">▤</span><span class="nav-label">Lesson Plan</span></a>
+      <a class="quick-action" href="{{ url_for('lesson.notes_page') }}"><span class="nav-icon">▧</span><span class="nav-label">Teaching Notes</span></a>
+      <a class="quick-action" href="{{ url_for('lesson.assignment_page') }}"><span class="nav-icon">☷</span><span class="nav-label">Assignment</span></a>
+      <a class="quick-action" href="{{ url_for('lesson.test_page') }}"><span class="nav-icon">☑</span><span class="nav-label">Quiz / Test</span></a>
+      <button class="quick-action" type="button" data-prompt="Create a marking scheme with marks allocated for each answer. Ask for the subject, grade and topic if needed."><span class="nav-icon">✓</span><span class="nav-label">Marking Scheme</span></button>
+      <button class="quick-action" type="button" data-prompt="Create an assessment rubric with clear criteria and performance levels. Ask for the subject, grade and task if needed."><span class="nav-icon">▦</span><span class="nav-label">Assessment Rubric</span></button>
+      <button class="quick-action" type="button" data-prompt="Write a professional student report-card comment. Ask for the subject, learner performance and tone if needed."><span class="nav-icon">☏</span><span class="nav-label">Report Comments</span></button>
+
+      <div class="history-heading"><span class="section-label">Recent chats</span></div>
+      <div class="session-list">
+        {% if sessions %}
+          {% for s in sessions %}
+          <a class="session-item" href="{{ url_for('chat_page') }}">
+            <span class="history-dot"></span>
+            <span class="session-copy"><strong>{{ s.title }}</strong><small>{{ s.updated_at }}</small></span>
+          </a>
+          {% endfor %}
+        {% else %}
+          <div class="history-empty">Your conversations will appear here.</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="sidebar-bottom">
+      <div class="user-card">
+        <span class="avatar">{{ full_name[0] if full_name else 'T' }}</span>
+        <span class="user-details"><strong>{{ full_name if full_name else 'Teacher' }}</strong><small>Teacher Assistant</small></span>
+        <a href="{{ url_for('logout') }}" class="logout-link" title="Log out" aria-label="Log out">↪</a>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="topbar-title">
+        <span class="status-dot"></span>
+        <div><h2 id="conversation-title">Teacher Assistant</h2><p>Plan, prepare and teach with confidence</p></div>
+      </div>
+      <div class="topbar-status"><span class="online-dot"></span> Assistant ready</div>
+    </header>
+
+    <section id="chat-window" class="chat-window" aria-live="polite">
+      {% if messages %}
+        {% for message in messages %}
+        <div class="message {{ 'user' if message.role == 'user' else 'assistant' }}">
+          {% if message.role != 'user' %}<div class="assistant-avatar">✦</div>{% endif %}
+          <div class="bubble">{{ message.content }}</div>
+        </div>
+        {% endfor %}
+      {% else %}
+      <div class="welcome" id="welcome">
+        <div class="welcome-mark" aria-hidden="true">✦</div>
+        <p class="eyebrow">YOUR TEACHING WORKSPACE</p>
+        <h1>What are we working on<br><span>today?</span></h1>
+        <p class="welcome-copy">Plan lessons, explain difficult concepts, create classroom resources, and make more time for your learners.</p>
+        <div class="dashboard-cards">
+          <a class="dashboard-card" href="{{ url_for('lesson.lesson_page') }}"><span class="dashboard-icon">▤</span><span class="card-title">Lesson Plan</span><span class="card-description">Build structured, curriculum-aligned lessons.</span></a>
+          <a class="dashboard-card" href="{{ url_for('lesson.notes_page') }}"><span class="dashboard-icon">▧</span><span class="card-title">Teaching Notes</span><span class="card-description">Prepare explanations and classroom notes.</span></a>
+          <a class="dashboard-card" href="{{ url_for('lesson.assignment_page') }}"><span class="dashboard-icon">☷</span><span class="card-title">Assignment</span><span class="card-description">Create learner tasks and activities.</span></a>
+          <a class="dashboard-card" href="{{ url_for('lesson.test_page') }}"><span class="dashboard-icon">☑</span><span class="card-title">Quiz / Test</span><span class="card-description">Make assessments and answer keys.</span></a>
+          <button class="dashboard-card" type="button" data-prompt="Create a marking scheme with marks allocated for each answer."><span class="dashboard-icon">✓</span><span class="card-title">Marking Scheme</span><span class="card-description">Allocate marks and provide model answers.</span></button>
+          <button class="dashboard-card" type="button" data-prompt="Create an assessment rubric with clear criteria and performance levels."><span class="dashboard-icon">▦</span><span class="card-title">Assessment Rubric</span><span class="card-description">Define criteria for consistent assessment.</span></button>
+          <button class="dashboard-card" type="button" data-prompt="Write a professional student report-card comment."><span class="dashboard-icon">☏</span><span class="card-title">Report Comments</span><span class="card-description">Draft constructive learner feedback.</span></button>
+          <button class="dashboard-card import-card" id="welcome-import" type="button"><span class="dashboard-icon">＋</span><span class="card-title">Import materials</span><span class="card-description">Attach a document or image to use with AI.</span></button>
+        </div>
+      </div>
+      {% endif %}
+    </section>
+
+    <div class="input-wrap">
+      <p id="chat-error" class="chat-error" role="alert" hidden></p>
+      <form id="chat-form" class="input-bar">
+        <div id="selected-files" class="selected-files" hidden></div>
+        <div class="input-row">
+          <input id="file-input" type="file" multiple accept=".pdf,.docx,.txt,.pptx,.xlsx,.csv,.png,.jpg,.jpeg" hidden>
+          <button id="attach-button" class="attach-button" type="button" aria-label="Attach files" title="Attach files">＋</button>
+          <textarea id="message-input" rows="1" aria-label="Message Teacher Assistant" placeholder="Message Teacher Assistant…" autocomplete="off"></textarea>
+          <button id="send-button" class="send-button" type="submit" aria-label="Send message" title="Send message">↑</button>
+        </div>
+      </form>
+      <div class="input-note">AI-generated material should be reviewed before classroom use.</div>
+    </div>
+  </main>
+</div>
+<script src="{{ url_for('static', filename='chat.js') }}"></script>
 </body>
 </html>

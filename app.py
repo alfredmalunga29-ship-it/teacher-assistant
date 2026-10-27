@@ -5,12 +5,15 @@ import re
 import socket
 import hashlib
 import binascii
+import uuid
+import time
 import traceback
 import libsql_client
 from dotenv import load_dotenv
 from google import genai
+from google.genai import types as genai_types
 from groq import Groq
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_fixed
 
 from curriculum import CURRICULA, DURATIONS, SUBJECTS, TOPICS
 from lesson_docx import schema
@@ -23,8 +26,65 @@ load_dotenv(os.path.join(BASE_DIR, ".env"))
 # a slow connection, but short enough that a user isn't stuck waiting forever.
 socket.setdefaulttimeout(10)
 
-app = Flask(__name__)
+import sys as _sys
+_groq_file = getattr(_sys.modules.get("groq"), "__file__", None)
+if _groq_file and os.path.abspath(_groq_file).startswith(BASE_DIR):
+    print("WARNING: a local groq.py is hiding the real Groq package. Delete it and run: pip install groq")
+
+app = Flask(
+    __name__,
+    template_folder=os.path.join(BASE_DIR, "templates"),
+    static_folder=os.path.join(BASE_DIR, "static"),
+)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-secret-change-me")
+
+
+# ---------------------------------------------------------------------------
+# File uploads
+# ---------------------------------------------------------------------------
+UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+ALLOWED_EXTENSIONS = {
+    # Images
+    "png", "jpg", "jpeg", "gif", "webp", "svg",
+    # Documents
+    "pdf", "doc", "docx", "txt", "rtf", "xls", "xlsx", "csv",
+    # Presentations / spreadsheets (OpenDocument)
+    "odp", "ods",
+}
+ALLOWED_MIME_TYPES = {
+    "image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml",
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "text/plain", "text/csv",
+}
+MAX_CONTENT_LENGTH = int(os.getenv("MAX_UPLOAD_BYTES", str(25 * 1024 * 1024)))
+
+
+def allowed_file(filename):
+    if "." not in filename:
+        return False
+    ext = filename.rsplit(".", 1)[1].lower()
+    return ext in ALLOWED_EXTENSIONS
+
+
+def allowed_content_type(content_type):
+    return content_type.split(";")[0].strip().lower() in ALLOWED_MIME_TYPES
+
+
+def get_upload_path(filename):
+    """Store files under a per-user folder so imports are private by default."""
+    uid = session.get("user_id")
+    folder = str(uid) if uid else "shared"
+    folder_path = os.path.join(UPLOAD_FOLDER, folder)
+    os.makedirs(folder_path, exist_ok=True)
+    # Guard against path traversal in the filename
+    safe = os.path.basename(filename)
+    return os.path.join(folder_path, safe)
 
 
 def require_env(name):
@@ -76,59 +136,133 @@ SYSTEM_INSTRUCTION = (
     "quizzes, grading rubrics, and report card comments. Be practical and concise."
 )
 
-# Prefer the known-good Gemini alias for the current google-genai SDK.
-# Older app versions used a retired alias, which caused the fallback path to trigger.
-MODEL_NAME = os.getenv("GEMINI_MODEL") or "gemini-2.5-flash"
+# Gemini model IDs, tried in order. Google retires models regularly (gemini-2.5-flash is
+# scheduled to shut down on 16 Oct 2026), so GEMINI_MODEL in .env can override the first
+# choice without a code change. If a model is gone (404) or out of quota, the next one is tried.
+GEMINI_MODELS = []
+for _name in [os.getenv("GEMINI_MODEL"), "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]:
+    if _name and _name not in GEMINI_MODELS:
+        GEMINI_MODELS.append(_name)
+MODEL_NAME = GEMINI_MODELS[0]
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=2))
+def _is_model_missing_error(exc):
+    text = str(exc).lower()
+    return any(t in text for t in ["404", "not found", "no longer available", "decommission", "does not exist"])
+
+
+def _is_permanent_ai_error(exc):
+    """Errors where sending the same request again will not help, so don't wait and retry."""
+    text = str(exc).lower()
+    return (looks_like_quota_error(exc) or _is_model_missing_error(exc)
+            or any(t in text for t in ["api key", "api_key", "permission", "401", "403", "invalid argument"]))
+
+
+_retry_transient = retry(
+    stop=stop_after_attempt(2), wait=wait_fixed(1),
+    retry=retry_if_exception(lambda e: not _is_permanent_ai_error(e)), reraise=True,
+)
+
+
+@_retry_transient
+def _gemini_call(client, model, contents, config):
+    kwargs = {"model": model, "contents": contents}
+    if config is not None:
+        kwargs["config"] = config
+    response = client.models.generate_content(**kwargs)
+    text = getattr(response, "text", None)
+    if not text:
+        raise RuntimeError("Gemini returned an empty response")
+    return text
+
+
+def _gemini_generate(client, contents, json_mode=False):
+    # No temperature/top_p/top_k: Gemini 3.x ignores them and may reject them.
+    config = genai_types.GenerateContentConfig(response_mime_type="application/json", max_output_tokens=8192) if json_mode else None
+    last_exc = None
+    for model in GEMINI_MODELS:
+        try:
+            return _gemini_call(client, model, contents, config)
+        except Exception as exc:
+            last_exc = exc
+            if _is_model_missing_error(exc) or looks_like_quota_error(exc):
+                print(f"Gemini model {model!r} unavailable, trying the next one: {str(exc)[:200]}")
+                continue
+            raise
+    raise last_exc or RuntimeError("No Gemini model was available")
+
+
 def call_gemini_with_retry(client, user_message):
-    response = client.models.generate_content(
-        model=MODEL_NAME,
-        contents=f"{SYSTEM_INSTRUCTION}\n\nTeacher's request: {user_message}",
-    )
-    if hasattr(response, "text") and response.text:
-        return response.text
-    if isinstance(response, dict):
-        return response.get("text") or json.dumps(response)
-    return str(response)
+    """Chat replies (plain text)."""
+    return _gemini_generate(client, user_message)
+
+
+def call_gemini_json(client, prompt):
+    """Lesson plans, notes, assignments and tests (the model is asked for JSON)."""
+    return _gemini_generate(client, prompt, json_mode=True)
+
+
+def build_chat_prompt(new_user_message, prior_messages=None):
+    prior_messages = prior_messages or []
+    lines = [SYSTEM_INSTRUCTION]
+    if prior_messages:
+        lines.append("\nPrevious conversation:")
+        for item in prior_messages:
+            role = str(item.get("role", "")).strip().lower()
+            content = str(item.get("content", "")).strip()[:1500]
+            if not content:
+                continue
+            if role == "user":
+                lines.append(f"Teacher: {content}")
+            elif role == "assistant":
+                lines.append(f"Assistant: {content}")
+    lines.append(f"\nTeacher's latest request: {new_user_message}")
+    return "\n".join(lines)
 
 
 def _groq_model_candidates():
-    preferred = os.getenv("GROQ_MODEL")
+    # llama-3.3-70b-versatile and llama-3.1-8b-instant were shut down by Groq on 16 Aug 2026.
+    # GROQ_MODEL in .env is tried first if you set it; otherwise the replacements below.
     candidates = []
-    for name in [preferred, "llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"]:
+    for name in [os.getenv("GROQ_MODEL"), "openai/gpt-oss-120b", "openai/gpt-oss-20b"]:
         if name and name not in candidates:
             candidates.append(name)
     return candidates
 
 
-def call_groq_with_text(prompt):
+def _groq_should_try_next_model(exc):
+    text = str(exc).lower()
+    return any(t in text for t in ["404", "not found", "decommission", "does not exist", "model_not_found",
+                                   "429", "rate limit", "rate_limit", "too many requests"])
+
+
+def call_groq_with_text(prompt, json_mode=False):
     client = get_groq_client()
     if client is None:
         raise RuntimeError("Groq is not configured")
 
+    if json_mode and "json" not in prompt.lower():
+        prompt += "\n\nReturn only valid JSON."
+
     last_exc = None
     for model in _groq_model_candidates():
+        kwargs = {"model": model, "messages": [{"role": "user", "content": prompt}],
+                  "temperature": 0.3, "max_tokens": 8192}
+        if json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
         try:
-            response = client.chat.completions.create(
-                model=model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.2,
-                max_tokens=2000,
-            )
-            return response.choices[0].message.content
+            response = client.chat.completions.create(**kwargs)
+            text = response.choices[0].message.content
+            if not text:
+                raise RuntimeError("Groq returned an empty response")
+            return text
         except Exception as exc:
             last_exc = exc
-            message = str(exc).lower()
-            if "404" in message or "not found" in message or "model" in message:
-                print(f"Groq model {model!r} unavailable, trying fallback: {exc}")
+            if _groq_should_try_next_model(exc):
+                print(f"Groq model {model!r} unavailable, trying the next one: {str(exc)[:200]}")
                 continue
             raise
-
-    if last_exc is not None:
-        raise last_exc
-    raise RuntimeError("No Groq model was available")
+    raise last_exc or RuntimeError("No Groq model was available")
 
 
 def _offline_chat_reply(user_message):
@@ -253,21 +387,24 @@ def _offline_lesson_plan_from_request(layout, subject, class_name, topic, subtop
     return _offline_lesson_plan(subject=subject or "ICT", class_name=class_name or "Form 1", topic=topic or "Computer Basics", duration=int(duration or 40), subtopic=subtopic or "Core concept")
 
 
-def generate_ai_reply(user_message):
+def generate_ai_reply_with_status(prompt, topic_hint=""):
+    """Returns (reply_text, is_offline). Gemini first, then Groq, then a labelled offline reply."""
     gemini_client = get_gemini_client()
     if gemini_client is not None:
         try:
-            return call_gemini_with_retry(gemini_client, user_message)
+            return call_gemini_with_retry(gemini_client, prompt), False
         except Exception as exc:
-            traceback.print_exc()
-            print("Gemini failure, trying Groq fallback:", repr(exc))
+            print("Gemini failed, trying Groq:", repr(exc)[:300])
 
     try:
-        return call_groq_with_text(f"{SYSTEM_INSTRUCTION}\n\nTeacher's request: {user_message}")
+        return call_groq_with_text(prompt), False
     except Exception as exc:
-        traceback.print_exc()
-        print("AI providers unavailable, using offline demo chat response:", repr(exc))
-        return _offline_chat_reply(user_message)
+        print("Groq failed, using the offline chat reply:", repr(exc)[:300])
+        return _offline_chat_reply(topic_hint or "your request"), True
+
+
+def generate_ai_reply(user_message):
+    return generate_ai_reply_with_status(user_message)[0]
 
 
 # ---------- Database (Turso) ----------
@@ -275,7 +412,7 @@ TURSO_DATABASE_URL = os.getenv("TURSO_DATABASE_URL")
 TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN")
 
 
-def get_db_client():
+def _new_raw_client():
     if not TURSO_DATABASE_URL or not TURSO_AUTH_TOKEN:
         raise RuntimeError(
             "Missing Turso configuration. Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN "
@@ -285,7 +422,47 @@ def get_db_client():
     return libsql_client.create_client_sync(url=connect_url, auth_token=TURSO_AUTH_TOKEN)
 
 
+_DB_ATTEMPTS = 3
+
+
+def _is_transient_db_error(exc):
+    text = (type(exc).__name__ + " " + str(exc)).lower()
+    return any(t in text for t in ["disconnect", "connection", "timeout", "timed out", "reset by peer", "eof",
+                                   "temporarily", "bad gateway", "gateway", "unavailable", "502", "503", "504", "ssl"])
+
+
+class _RetryingDB:
+    """Opens a fresh connection for every statement, closes it afterwards, and tries again a
+    couple of times if the connection drops ("Server disconnected"). Before this, clients were
+    never closed, so stale connections piled up and later requests failed on them."""
+
+    def execute(self, sql, args=None):
+        last = None
+        for attempt in range(_DB_ATTEMPTS):
+            try:
+                with _new_raw_client() as raw:
+                    return raw.execute(sql, args) if args is not None else raw.execute(sql)
+            except Exception as exc:
+                last = exc
+                if attempt < _DB_ATTEMPTS - 1 and _is_transient_db_error(exc):
+                    print(f"Database connection problem ({type(exc).__name__}: {str(exc)[:120]}); retrying...")
+                    time.sleep(0.7 * (attempt + 1))
+                    continue
+                raise
+        raise last
+
+
+def get_db_client():
+    return _RetryingDB()
+
+
+_db_ready = False
+
+
 def init_db():
+    global _db_ready
+    if _db_ready:
+        return
     db = get_db_client()
     db.execute("""
         CREATE TABLE IF NOT EXISTS users (
@@ -297,6 +474,65 @@ def init_db():
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    # conversations and messages for persistent chat
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS conversations (
+            id TEXT PRIMARY KEY,
+            user_id INTEGER,
+            title TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            conversation_id TEXT,
+            role TEXT,
+            content TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+
+
+    # Imported images and documents (images, PDFs, Word docs, spreadsheets, etc.)
+    db.execute("""CREATE TABLE IF NOT EXISTS documents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            file_type TEXT NOT NULL,          -- 'image', 'pdf', 'docx', 'spreadsheet', ...
+            mime_type TEXT,
+            extension TEXT,
+            file_path TEXT NOT NULL,          -- relative to UPLOAD_FOLDER
+            file_size INTEGER,
+            uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, title)
+        )""")
+    _db_ready = True
+
+
+def create_conversation(user_id, title="New conversation"):
+    db = get_db_client()
+    conv_id = uuid.uuid4().hex
+    db.execute("INSERT INTO conversations (id, user_id, title) VALUES (?, ?, ?)", [conv_id, user_id, title])
+    return conv_id
+
+
+def save_message(conversation_id, role, content):
+    db = get_db_client()
+    db.execute("INSERT INTO messages (conversation_id, role, content) VALUES (?, ?, ?)", [conversation_id, role, content])
+
+
+def get_conversations_for_user(user_id):
+    db = get_db_client()
+    rows = db.execute("SELECT id, title, created_at FROM conversations WHERE user_id = ? ORDER BY created_at DESC", [user_id]).rows
+    return [{"id": r[0], "title": r[1], "created_at": r[2]} for r in rows]
+
+
+def get_messages_for_conversation(conversation_id):
+    db = get_db_client()
+    rows = db.execute("SELECT role, content, created_at FROM messages WHERE conversation_id = ? ORDER BY id", [conversation_id]).rows
+    return [{"role": r[0], "content": r[1], "created_at": r[2]} for r in rows]
 
 
 # ---------- Password hashing (same approach as the original Streamlit app) ----------
@@ -402,10 +638,22 @@ def logout():
 def chat_page():
     if not session.get("user_id"):
         return redirect(url_for("index"))
-    if "chat_history" not in session:
-        session["chat_history"] = []
+    user_id = session.get("user_id")
+    # ensure DB tables exist
+    init_db()
+    # select or create current conversation
+    if "current_conversation" not in session:
+        convs = get_conversations_for_user(user_id)
+        if convs:
+            session["current_conversation"] = convs[0]["id"]
+        else:
+            session["current_conversation"] = create_conversation(user_id, "New conversation")
+    messages = get_messages_for_conversation(session["current_conversation"])
     cfg = {"curricula": CURRICULA, "subjects": SUBJECTS, "durations": DURATIONS, "topics": TOPICS, "schema": schema()}
-    return render_template("chat.html", messages=session["chat_history"], full_name=session.get("full_name", ""), cfg=cfg)
+    return render_template("chat.html", messages=messages, full_name=session.get("full_name", ""), cfg=cfg)
+
+
+MAX_HISTORY_MESSAGES = 12  # how many earlier messages the AI sees
 
 
 @app.route("/send", methods=["POST"])
@@ -413,26 +661,35 @@ def send():
     if not session.get("user_id"):
         return jsonify({"error": "Please log in again."}), 401
 
-    user_message = request.json.get("message", "").strip()
+    user_message = ((request.get_json(silent=True) or {}).get("message") or "").strip()
     if not user_message:
         return jsonify({"error": "Empty message"}), 400
 
-    if "chat_history" not in session:
-        session["chat_history"] = []
-
-    session["chat_history"].append({"role": "user", "content": user_message})
-
+    # Chat history lives in the database. (Keeping it in the session cookie overflows the
+    # ~4 KB browser limit after a few replies, which logs the teacher out.)
+    conv_id = session.get("current_conversation")
+    prior = []
     try:
-        reply = generate_ai_reply(user_message)
+        if not conv_id:
+            conv_id = create_conversation(session["user_id"], "New conversation")
+            session["current_conversation"] = conv_id
+        prior = get_messages_for_conversation(conv_id)[-MAX_HISTORY_MESSAGES:]
+        save_message(conv_id, "user", user_message)
     except Exception as e:
-        message = str(e).lower()
-        if "resource_exhausted" in message or "quota" in message or "429" in message or "groq" in message:
-            reply = "The AI service is currently unavailable. Please try again in a moment."
-        else:
-            reply = f"Sorry, something went wrong: {e}"
+        print("Could not load/save chat history:", repr(e))
+        conv_id = None
 
-    session["chat_history"].append({"role": "assistant", "content": reply})
-    session.modified = True
+    prompt = build_chat_prompt(user_message, prior)
+    try:
+        reply, is_offline = generate_ai_reply_with_status(prompt, topic_hint=user_message)
+    except Exception as e:
+        reply, is_offline = f"Sorry, something went wrong: {e}", True
+
+    if conv_id and not is_offline:  # don't store offline placeholders as if they were real answers
+        try:
+            save_message(conv_id, "assistant", reply)
+        except Exception as e:
+            print("Could not save the reply:", repr(e))
 
     return jsonify({"reply": reply})
 
@@ -441,31 +698,161 @@ def send():
 def clear():
     if not session.get("user_id"):
         return jsonify({"error": "Please log in again."}), 401
-    session["chat_history"] = []
-    return jsonify({"status": "cleared"})
+    # create a new conversation for the user and switch to it
+    user_id = session.get("user_id")
+    init_db()
+    conv_id = create_conversation(user_id, "New conversation")
+    session["current_conversation"] = conv_id
+    return jsonify({"status": "cleared", "conversation_id": conv_id})
+
+# ---------- File import routes (require login) ----------
+@app.route("/import", methods=["POST"])
+def import_file():
+    """Upload an image or document for later use in lesson plans, notes, etc."""
+    if not session.get("user_id"):
+        return jsonify({"error": "Please log in again."}), 401
+
+    if "file" not in request.files:
+        return jsonify({"error": "No file field found."}), 400
+
+    f = request.files["file"]
+    if not f or not f.filename:
+        return jsonify({"error": "No file selected."}), 400
+
+    if not allowed_file(f.filename):
+        return jsonify({"error": "File type not allowed. Upload images, PDFs, Word docs, or spreadsheets."}), 400
+
+    if not allowed_content_type(f.mimetype):
+        return jsonify({"error": "File content type not allowed."}), 400
+
+    # Enforce a soft size limit from the client-side; Flask also enforces MAX_CONTENT_LENGTH
+    try:
+        f.seek(0, os.SEEK_END)
+        size = f.tell()
+        f.seek(0)
+    except Exception:
+        size = 0
+    max_bytes = MAX_CONTENT_LENGTH or (25 * 1024 * 1024)
+    if size > max_bytes:
+        return jsonify({"error": f"File too large. Maximum size is {max_bytes} bytes."}), 400
+
+    # Build a title and a safe filename
+    title = request.form.get("title", "").strip()
+    if not title:
+        ext = f.filename.rsplit(".", 1)[1].lower() if "." in f.filename else ""
+        title = f"Imported {ext if ext else 'file'} {uuid.uuid4().hex[:6]}"
+
+    # Use a unique filename to avoid collisions
+    ext = f.filename.rsplit(".", 1)[1].lower() if "." in f.filename else ""
+    stored_name = f"{uuid.uuid4().hex}.{ext}" if ext else uuid.uuid4().hex
+    upload_path = get_upload_path(stored_name)
+
+    f.save(upload_path)
+
+    # Record the import in the database
+    db = get_db_client()
+    result = db.execute(
+        "INSERT INTO documents (user_id, title, file_type, mime_type, extension, file_path, file_size) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [session["user_id"], title, _file_type_for(ext), f.mimetype, ext,
+         os.path.relpath(upload_path, UPLOAD_FOLDER), size],
+    )
+
+    doc_id = result.last_insert_rowid
+    return jsonify({"id": doc_id, "url": url_for("import_download", doc_id=doc_id, _external=True),
+                    "title": title, "file_type": _file_type_for(ext)})
+
+
+@app.route("/import/list", methods=["GET"])
+def list_user_documents():
+    """Return a list of the current user's imported files."""
+    if not session.get("user_id"):
+        return jsonify({"error": "Please log in again."}), 401
+
+    db = get_db_client()
+    rows = db.execute(
+        "SELECT id, title, file_type, mime_type, extension, file_path, file_size, uploaded_at "
+        "FROM documents WHERE user_id = ? ORDER BY uploaded_at DESC", [session["user_id"]]
+    ).rows
+
+    return jsonify([{
+        "id": r[0], "title": r[1], "file_type": r[2], "mime_type": r[3],
+        "extension": r[4], "file_path": r[5], "file_size": r[6],
+        "uploaded_at": r[7]
+    } for r in rows])
+
+
+@app.route("/import/<int:doc_id>/download")
+def import_download(doc_id):
+    """Return the stored file so it can be re-used in a document."""
+    if not session.get("user_id"):
+        return jsonify({"error": "Please log in again."}), 401
+
+    db = get_db_client()
+    rows = db.execute(
+        "SELECT file_path, file_size FROM documents WHERE id = ? AND user_id = ?", [doc_id, session["user_id"]]
+    ).rows
+    row = rows[0] if rows else None
+    if not row:
+        return jsonify({"error": "File not found."}), 404
+
+    full_path = os.path.join(UPLOAD_FOLDER, row[0])
+    if not os.path.isfile(full_path):
+        return jsonify({"error": "File missing on disk."}), 404
+
+    from flask import send_file
+    return send_file(full_path, as_attachment=True,
+                     download_name=row[0] if False else os.path.basename(full_path))
+
+
+def _file_type_for(ext):
+    """Map a file extension to a human-readable file type."""
+    mapping = {
+        "png": "image", "jpg": "image", "jpeg": "image", "gif": "image",
+        "webp": "image", "svg": "image",
+        "pdf": "pdf", "doc": "document", "docx": "document", "txt": "document",
+        "rtf": "document", "xls": "spreadsheet", "xlsx": "spreadsheet",
+        "csv": "spreadsheet", "odp": "presentation", "ods": "presentation",
+    }
+    return mapping.get(ext.lower(), "document")
+
 
 
 from lesson_routes import init_lesson_plan
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=2), reraise=True)
+def _valid_json_text(text):
+    try:
+        a, b = text.find("{"), text.rfind("}")
+        json.loads(text[a:b + 1])
+        return True
+    except Exception:
+        return False
+
+
 def ask_ai(prompt):
-    # Try Gemini first; if it is quota-blocked or fails for any other reason,
-    # fall back to Groq for the lesson-plan JSON generation.
+    """JSON generation for lesson plans, notes, assignments and tests.
+    Gemini first, then Groq. A provider that answers with broken JSON counts as a failure.
+    If both fail this raises; lesson_routes then shows a clearly labelled offline template."""
+    errors = []
     gemini_client = get_gemini_client()
     if gemini_client is not None:
         try:
-            return call_gemini_with_retry(gemini_client, prompt)
+            text = call_gemini_json(gemini_client, prompt)
+            if _valid_json_text(text):
+                return text
+            errors.append("Gemini: reply was not valid JSON")
         except Exception as exc:
-            traceback.print_exc()
-            print("Gemini failure, falling back to Groq for lesson generation:", repr(exc))
+            errors.append(f"Gemini: {str(exc)[:200]}")
+        print("Gemini did not produce a lesson, trying Groq:", errors[-1])
 
     try:
-        return call_groq_with_text(prompt)
+        text = call_groq_with_text(prompt, json_mode=True)
+        if _valid_json_text(text):
+            return text
+        errors.append("Groq: reply was not valid JSON")
     except Exception as exc:
-        traceback.print_exc()
-        print("AI providers unavailable, using offline prompt-aware fallback:", repr(exc))
-        return _offline_fallback_json_from_prompt(prompt)
+        errors.append(f"Groq: {str(exc)[:200]}")
+    raise RuntimeError("AI providers unavailable. " + " | ".join(errors))
 
 
 init_lesson_plan(app, ask_ai)

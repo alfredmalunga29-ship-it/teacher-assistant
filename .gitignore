@@ -4,3 +4,28 @@ __pycache__/
 
 venv/
 .venv312/
+
+# Python virtual environments
+.venv/
+.venv312/
+venv/
+
+# Python generated files
+__pycache__/
+*.py[cod]
+
+# Secrets
+.env
+
+# Uploaded files and local data
+uploads/
+*.db
+*.sqlite
+*.sqlite3
+
+# Large school reference materials
+School Material/
+
+# Temporary files
+*.log
+.DS_Store
